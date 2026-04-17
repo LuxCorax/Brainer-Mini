@@ -87,6 +87,9 @@ input:focus{border-color:rgba(0,194,212,0.4);box-shadow:0 0 0 3px rgba(0,194,212
 /* Pulse dot for live indicator */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 .live-dot{width:5px;height:5px;border-radius:50%;background:#00E87A;display:inline-block;animation:pulse 2s ease infinite;margin-right:4px;vertical-align:middle}
+/* Spinner for analyze pitch */
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,194,212,0.2);border-top-color:#00C2D4;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -173,15 +176,20 @@ input:focus{border-color:rgba(0,194,212,0.4);box-shadow:0 0 0 3px rgba(0,194,212
 <!-- ═══ 8. KEY LEVELS ═══ -->
 <div class="card reveal reveal-d4 fade-swap" style="margin-bottom:16px" id="levels-section"></div>
 
-<!-- ═══ 9. FIND OUT MORE ═══ -->
-<div style="margin-bottom:8px">
-  <div class="grad-border" style="border-radius:10px">
-    <a id="cta-findmore" href="https://brainer.pro" target="_blank" rel="noopener" style="display:block;width:100%;padding:12px 0;border-radius:9px;background:#0D0F14;border:none;font-family:'Unbounded',sans-serif;font-size:12px;font-weight:500;cursor:pointer;color:#E8EAF0;text-decoration:none;text-align:center">
-      What you get with
-      <span style="display:inline-flex;align-items:center;gap:3px;vertical-align:middle">
-        <svg viewBox="130 155 340 230" fill="none" width="11" height="7" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
-        <span class="gr" style="font-weight:600">Brainer Pro</span>
-      </span>
+<!-- ═══ 9. COMMUNITY + BRAINER PRO ═══ -->
+<div style="margin-bottom:8px;display:flex;gap:8px">
+  <div class="grad-border" style="border-radius:10px;flex:1">
+    <a id="cta-community" href="https://t.me/BrainerProAnalyses" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:12px 0;border-radius:9px;background:#0D0F14;border:none;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:500;cursor:pointer;color:#E8EAF0;text-decoration:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 8px rgba(0,194,212,0.3))">
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+      <span>Join our <span class="gr" style="font-weight:600">Telegram</span></span>
+    </a>
+  </div>
+  <div class="grad-border" style="border-radius:10px;flex:1">
+    <a id="cta-findmore" href="https://brainer.pro" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:12px 0;border-radius:9px;background:#0D0F14;border:none;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:500;cursor:pointer;color:#E8EAF0;text-decoration:none">
+      <svg viewBox="130 155 340 230" fill="none" width="13" height="9" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+      <span class="gr" style="font-weight:600">Brainer Pro</span>
     </a>
   </div>
 </div>
@@ -244,7 +252,7 @@ input:focus{border-color:rgba(0,194,212,0.4);box-shadow:0 0 0 3px rgba(0,194,212
 // ═══════════════════════════════════════════════════════════════
 // CONFIG & API
 // ═══════════════════════════════════════════════════════════════
-const API_BASE = 'https://brainer-mini-production.up.railway.app';
+const API_BASE = ''; // Set to backend URL when deployed, e.g. 'https://brainer-api.onrender.com'
 const USE_MOCK = !API_BASE; // Auto-fallback to mock when no API configured
 
 // Telegram Mini App
@@ -1003,8 +1011,13 @@ function renderPitch() {
   area.innerHTML =
     '<div style="background:linear-gradient(135deg,rgba(0,191,255,0.18),rgba(0,232,122,0.10));padding:1.5px;border-radius:11px">' +
     '<div style="background:#0D0F14;border-radius:10px;padding:16px">' +
-    '<div class="gr" style="font-size:12px;font-weight:600;line-height:1.5;margin-bottom:8px">' +
-    ANALYZE_PITCH_LINE_1 + '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+    '<span class="spinner"></span>' +
+    '<span class="gr" style="font-size:13px;font-weight:600">Analyzing 5m</span>' +
+    '</div>' +
+    '<div style="font-size:11px;color:rgba(232,234,240,0.6);line-height:1.55;margin-bottom:6px">' +
+    'Confidence comes from alignment with lower and higher timeframes.' +
+    '</div>' +
     '<div style="font-size:11px;color:rgba(232,234,240,0.55);line-height:1.55">' +
     ANALYZE_PITCH_LINE_2 + '</div>' +
     '</div></div>';
@@ -1028,10 +1041,8 @@ async function handleAnalyzeTap() {
   btn.disabled = true;
   btn.style.opacity = '0.7';
 
-  const isFirstTap = !localStorage.getItem(FIRST_TAP_FLAG);
-  // Set flag immediately so rapid re-taps in same session don't re-trigger pitch
-  if (isFirstTap) localStorage.setItem(FIRST_TAP_FLAG, '1');
-
+  const isFirstTap = btn.textContent.trim() === 'Analyze';
+  // Every "Analyze" click shows the pitch. Only "Re-analyze" clicks skip it.
   trackEvent('analyze_tap', { pair: currentPair, first_tap: isFirstTap });
 
   const tapTime = Date.now();
@@ -1081,7 +1092,7 @@ document.getElementById('analyze-btn').addEventListener('click', handleAnalyzeTa
 // ═══════════════════════════════════════════════════════════════
 // AUTO-REFRESH
 // ═══════════════════════════════════════════════════════════════
-const REFRESH_INTERVAL = 60000; // 60s for mock, reduce for live API
+const REFRESH_INTERVAL = 10000; // 10s for live feel
 let refreshTimer = null;
 
 function startAutoRefresh() {
