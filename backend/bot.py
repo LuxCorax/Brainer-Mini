@@ -78,15 +78,9 @@ def _open_app_keyboard():
 
 
 def _start_keyboard():
-    """Four-button stacked keyboard for /start handshake."""
+    """Single-button keyboard — just Open App."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌀 Open App", web_app=WebAppInfo(url=WEBAPP_URL))],
-        [InlineKeyboardButton("📊 Find out more", url=BRAINER_URL)],
-        [InlineKeyboardButton("💬 Join the community", url=COMMUNITY_URL)],
-        [InlineKeyboardButton(
-            "📝 Join NoBrainer waitlist",
-            web_app=WebAppInfo(url=WEBAPP_URL + "?startapp=waitlist"),
-        )],
     ])
 
 
@@ -125,7 +119,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "⚡ *Brainer Mini*\n\n"
         "Live institutional-grade analysis on every USDT pair.\n\n"
-        "Tap below to open the app, learn more, or join the community."
+        "Tap below to open the app."
     )
     await update.message.reply_text(
         text, parse_mode="Markdown", reply_markup=_start_keyboard()
