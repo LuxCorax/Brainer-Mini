@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: brainer-mini-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: OWNER_CHAT_ID
+        sync: false
+      - key: WEBAPP_URL
+        value: https://luxcorax.github.io/Brainer-Mini/
+    plan: free
+    healthCheckPath: /api/health
