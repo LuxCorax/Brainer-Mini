@@ -163,22 +163,37 @@ def _iso(ts: Optional[float]) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds")
 
 
+def _esc_md(s: Optional[str]) -> str:
+    """Escape Telegram Markdown special chars in user-supplied text.
+    Required whenever interpolating usernames, first_names, or arbitrary
+    strings into a message sent with parse_mode='Markdown'. Without this,
+    a single underscore or asterisk in a username (common) makes Telegram
+    reject the whole message as BadRequest and the user sees nothing.
+    """
+    if not s:
+        return ""
+    for ch in ("_", "*", "[", "]", "`"):
+        s = s.replace(ch, "\\" + ch)
+    return s
+
+
 def _fmt_user_row(u: dict) -> str:
     """One line per user for /users output."""
-    name = u.get("first_name") or "—"
-    uname = f"@{u['username']}" if u.get("username") else "—"
+    name = _esc_md(u.get("first_name")) or "—"
+    uname = f"@{_esc_md(u['username'])}" if u.get("username") else "—"
     opens = u.get("open_count") or 0
     src = u.get("first_start_param")
-    src_str = f" · src:{src}" if src else ""
+    src_str = f" · src:{_esc_md(src)}" if src else ""
     last = _fmt_ts_relative(u.get("last_seen"))
     return f"• {name} ({uname}) · id `{u['tg_id']}` · {opens} opens{src_str} · {last}"
 
 
 def _fmt_waitlist_row(w: dict) -> str:
     """One line per waitlist entry for /waitlist output."""
-    uname = f"@{w['tg_username']}" if w.get("tg_username") else "—"
+    email = _esc_md(w.get("email")) or "—"
+    uname = f"@{_esc_md(w['tg_username'])}" if w.get("tg_username") else "—"
     when = _fmt_ts_relative(w.get("signed_up_at"))
-    return f"• `{w['email']}` · {uname} · {when}"
+    return f"• `{email}` · {uname} · {when}"
 
 
 def _page_keyboard(scope: str, page: int, total: int, page_size: int) -> Optional[InlineKeyboardMarkup]:
@@ -251,9 +266,9 @@ async def cmd_recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["📋 *Recent events* (last 30)\n"]
     for r in rows:
         when = _fmt_ts_relative(r.get("timestamp"))
-        who = r.get("first_name") or (f"@{r['username']}" if r.get("username") else f"id:{r['tg_id']}")
+        who = _esc_md(r.get("first_name")) or (f"@{_esc_md(r['username'])}" if r.get("username") else f"id:{r['tg_id']}")
         data = r.get("event_data") or ""
-        data_excerpt = f" · {data[:40]}" if data else ""
+        data_excerpt = f" · {_esc_md(data[:40])}" if data else ""
         lines.append(f"• {when} · `{r['event_type']}` · {who}{data_excerpt}")
     text = "\n".join(lines)
     # Telegram caps messages at 4096 chars — truncate defensively
