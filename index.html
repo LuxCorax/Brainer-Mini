@@ -380,8 +380,8 @@ function generateMock(pair){
     BRR:{sentiment:"weak_bull",confidence:"low",paragraph:"Only the 5m is bullish while both the short-term and the bigger trend are pointing down. The larger frame is actively pushing lower with momentum still expanding, putting weight on the bear side. Reads as a delayed signal: the 5m is often last to flip when the surrounding frames are this aligned, and the bullish pulse here typically fades into the larger pressure."},
     RBB:{sentiment:"weak_bear",confidence:"low",paragraph:"Only the 5m is bearish while both the short-term and the bigger trend are pointing up. The larger frame is actively pushing higher with momentum still expanding, putting weight on the bull side. Reads as a delayed signal: the 5m is often last to flip when the surrounding frames are this aligned, and the bearish pulse here typically fades into the larger pressure."},
   };
-  const base=MOCK_ALIGN[bkey]||{sentiment:"neutral",confidence:"low",paragraph:"All three frames are sitting in indecision with no side holding control. The stack is waiting — momentum isn't committed in either direction across any timeframe. Reads as a market between moves: direction will come from outside the current picture rather than from anything already on the chart."};
-  const alignment={scenario_code:bkey,sentiment:base.sentiment,confidence:base.confidence,paragraph:base.paragraph,conflicts:[],capitulation:false};
+  const mockAlign=MOCK_ALIGN[bkey]||{sentiment:"neutral",confidence:"low",paragraph:"All three frames are sitting in indecision with no side holding control. The stack is waiting — momentum isn't committed in either direction across any timeframe. Reads as a market between moves: direction will come from outside the current picture rather than from anything already on the chart."};
+  const alignment={scenario_code:bkey,sentiment:mockAlign.sentiment,confidence:mockAlign.confidence,paragraph:mockAlign.paragraph,conflicts:[],capitulation:false};
 
   // Signals — flat list with bullish boolean
   const sigPool=[
