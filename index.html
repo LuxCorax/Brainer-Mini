@@ -45,7 +45,7 @@ input:focus{border-color:rgba(0,194,212,0.4);box-shadow:0 0 0 3px rgba(0,194,212
 .drop-toggle{padding:10px 20px;border-radius:10px;border:1.5px solid rgba(0,194,212,0.4);background:rgba(0,194,212,0.08);color:#00C2D4;font-family:'Unbounded',sans-serif;font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:10px;box-shadow:0 0 15px rgba(0,194,212,0.08)}
 .drop-menu{position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);min-width:180px;background:#0D0F14;border:1px solid rgba(0,194,212,0.25);border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.8),0 0 20px rgba(0,194,212,0.06);display:none;z-index:100}
 .drop-menu.open{display:block}
-.drop-list{max-height:200px;overflow-y:auto}
+.drop-list{max-height:280px;overflow-y:auto}
 .drop-item{display:block;width:100%;padding:7px 14px;border:none;background:transparent;color:rgba(232,234,240,0.65);font-family:'Unbounded',sans-serif;font-size:10px;font-weight:400;cursor:pointer;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04)}
 .drop-item:hover{background:rgba(0,194,212,0.06)}
 .drop-item.active{background:rgba(0,194,212,0.1);color:#00C2D4;font-weight:600}
@@ -309,7 +309,10 @@ window.addEventListener('beforeunload', () => {
 // ═══════════════════════════════════════════════════════════════
 // PAIRS & MOCK DATA
 // ═══════════════════════════════════════════════════════════════
-const PAIRS = [
+// Seeded with 50 popular pairs as a fallback. Replaced at runtime by a
+// fetch to /api/pairs, which returns all ~439 USDT pairs loaded by the
+// backend from Binance exchangeInfo on startup.
+let PAIRS = [
   "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","DOGE/USDT",
   "ADA/USDT","AVAX/USDT","DOT/USDT","LINK/USDT","MATIC/USDT","UNI/USDT",
   "ATOM/USDT","LTC/USDT","FIL/USDT","APT/USDT","ARB/USDT","OP/USDT",
@@ -320,6 +323,32 @@ const PAIRS = [
   "HBAR/USDT","VET/USDT","ICP/USDT","GRT/USDT","SAND/USDT","MANA/USDT",
   "ENS/USDT","LDO/USDT","PENDLE/USDT","ENA/USDT","TON/USDT"
 ];
+
+// Fetch the live pair list from backend and replace the seeded fallback.
+// Fire-and-forget; if it fails (API_BASE empty, network error) we keep the
+// 50-pair seed so the dropdown still works in mock mode.
+async function loadLivePairs() {
+  if (!API_BASE) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/pairs`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!Array.isArray(data.pairs) || data.pairs.length === 0) return;
+    // Backend shape: [{symbol:"BTCUSDT", base:"BTC", quote:"USDT"}, ...]
+    // Frontend shape: "BTC/USDT" strings, BTC-first alphabetical order.
+    const majors = ["BTC","ETH","BNB","SOL","XRP","DOGE","ADA","AVAX"];
+    const formatted = data.pairs.map(p => `${p.base}/${p.quote}`);
+    // Sort: majors first in listed order, then everything else alphabetically
+    const majorSet = new Set(majors.map(m => `${m}/USDT`));
+    const majorPairs = majors.map(m => `${m}/USDT`).filter(s => formatted.includes(s));
+    const rest = formatted.filter(s => !majorSet.has(s)).sort();
+    PAIRS = [...majorPairs, ...rest];
+    // If the dropdown is already open when this resolves, re-render it.
+    if (dropOpen) populateDropdown(document.getElementById('pair-search').value || '');
+  } catch (e) {
+    console.warn('Failed to load live pairs, using seed:', e);
+  }
+}
 const PRICES={BTC:84932,ETH:1623,BNB:612,SOL:178,XRP:0.62,DOGE:0.164,ADA:0.48,AVAX:38.7,DOT:7.2,LINK:15.8,MATIC:0.71,UNI:11.4,ATOM:9.1,LTC:84.5,FIL:5.8,APT:9.3,ARB:1.12,OP:2.45,NEAR:7.6,SUI:1.34,INJ:28.4,TIA:11.2,SEI:0.42,FET:2.18,RENDER:10.5,PEPE:0.0000124,WIF:2.65,BONK:0.0000234,FLOKI:0.000178,SHIB:0.0000248,WLD:3.45,JUP:1.28,STX:2.15,IMX:2.34,AAVE:178,MKR:1850,CRV:0.62,RUNE:5.8,FTM:0.78,ALGO:0.22,HBAR:0.12,VET:0.034,ICP:14.2,GRT:0.28,SAND:0.58,MANA:0.52,ENS:28.5,LDO:2.15,PENDLE:6.8,ENA:0.92,TON:6.45};
 const SIGS_BULL=["Golden Cross (50/200)","VWAP Break (Daily)","BrainWaves Bullish Cross","EMA 21 Break","BrainWaves Zero Cross Up","Fib 0.618 Break","EMA 200 Break","Bullish Engulfing","Three White Soldiers"];
 const SIGS_BEAR=["RSI Hidden Divergence","Middle Line Break","Market Manipulation (CTF)","Death Cross (50/200)","RSI Regular Divergence","Delta Divergence","BrainWaves Extreme OB","VWAP Break (Weekly)","Dark Cloud Cover"];
@@ -406,7 +435,7 @@ function generateMock(pair){
   }
 
   // Levels — new shape with price_low/price_high/is_range/sources/cluster_size
-  const SRC_POOL=[["Fib 0.618"],["EMA 50"],["PDH"],["D-VWAP"],["Upper"],["Mid"],["Lower"],["Fib 0.5","EMA 21"],["Fib 0.382","EMA 50"],["PDC","Lower"]];
+  const SRC_POOL=[["Fib 0.618"],["EMA 50"],["PDH"],["VWAP"],["Trend Top"],["Trend Mid"],["Trend Low"],["Fib 0.5","EMA 21"],["Fib 0.382","EMA 50"],["PDC","Trend Low"]];
   const mkLevels=dir=>{
     const out=[];
     for(let i=0;i<3;i++){
@@ -432,7 +461,7 @@ function generateMock(pair){
     volume:{
       of_average_pct:ri(30,180),
       trend:pick(["Increasing","Decreasing","Stable"]),
-      candle:pick(["Bullish","Bearish","Doji"]),
+      candle:pick(["Bullish","Bearish","Neutral"]),
     },
     signals,
     levels:{resistance:mkLevels(1),support:mkLevels(-1)},
@@ -713,7 +742,7 @@ function renderVolume(d) {
   const trendCol = trend === 'Increasing' ? '#00E87A' : trend === 'Decreasing' ? '#FF5A5A' : '#FFB020';
   const trendArr = trend === 'Increasing' ? '▲' : trend === 'Decreasing' ? '▼' : '●';
 
-  const candle = v.candle || 'Doji';
+  const candle = v.candle || 'Neutral';
   const candleCol = candle === 'Bullish' ? '#00E87A' : candle === 'Bearish' ? '#FF5A5A' : '#FFB020';
 
   // Bar: 0–200% scale → 100% average sits at track midpoint.
@@ -1092,7 +1121,7 @@ document.getElementById('analyze-btn').addEventListener('click', handleAnalyzeTa
 // ═══════════════════════════════════════════════════════════════
 // AUTO-REFRESH
 // ═══════════════════════════════════════════════════════════════
-const REFRESH_INTERVAL = 10000; // 10s for live feel
+const REFRESH_INTERVAL = 5000; // 5s for extra-live feel
 let refreshTimer = null;
 
 function startAutoRefresh() {
@@ -1132,6 +1161,7 @@ async function trackAppOpen() {
   return null;
 }
 trackAppOpen();
+loadLivePairs();
 
 buildPhoneDeck();
 loadPair(currentPair, false).then(() => {
