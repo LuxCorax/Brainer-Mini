@@ -427,7 +427,7 @@ def compute_support_resistance(highs, lows, closes, volumes, timestamps,
     current_price = closes[-1] if closes else 0
     # 1. Trend line levels (PRIMARY)
     if trend_lines:
-        for name, key in [("Upper", "upper"), ("Mid", "mid"), ("Lower", "lower")]:
+        for name, key in [("Trend Top", "upper"), ("Trend Mid", "mid"), ("Trend Low", "lower")]:
             val = trend_lines.get(key)
             if val is not None:
                 raw_levels.append({"price": val, "source": name, "type": "trend"})
@@ -443,7 +443,7 @@ def compute_support_resistance(highs, lows, closes, volumes, timestamps,
     # 4. VWAP
     vwap_val = _last_valid(vwap_values)
     if vwap_val is not None:
-        raw_levels.append({"price": vwap_val, "source": "D-VWAP", "type": "vwap"})
+        raw_levels.append({"price": vwap_val, "source": "VWAP", "type": "vwap"})
     # 5. Previous day H/L/C
     pdh, pdl, pdc = _prev_day_hld(highs, lows, closes, timestamps)
     if pdh is not None:
@@ -542,14 +542,17 @@ def compute_volume_analysis(opens, closes, highs, lows, volumes, avg_period=21):
       line 2581:      volTrend = volAvgRecent > volAvgMedium*1.1 ? "Increasing"
                               : volAvgRecent < volAvgMedium*0.9 ? "Decreasing" : "Stable"
       line 2582:      candleType = close > open ? "Bullish" : close < open ? "Bearish" : "Doji"
+      Mini App deviation: c==o labeled "Neutral" (matches line 1560 convictionDir
+      convention). "Doji" belongs to candlestick pattern signals, not to this
+      display field. Keeps the volume row binary+flat and visually unambiguous.
 
     M6: conviction_pct is NOT part of the Volume row — it belongs to Delta Analysis
     in Brainer Pro, which the Mini App dashboard doesn't render.
     """
     if len(volumes) < avg_period:
-        return {"of_average_pct": 100, "trend": "Stable", "candle": "Doji"}
+        return {"of_average_pct": 100, "trend": "Stable", "candle": "Neutral"}
     o, c, v = opens[-1], closes[-1], volumes[-1]
-    candle_type = "Bullish" if c > o else "Bearish" if c < o else "Doji"
+    candle_type = "Bullish" if c > o else "Bearish" if c < o else "Neutral"
     avg_vol = sum(volumes[-avg_period:]) / avg_period  # = volAvgMedium (21-bar SMA incl. current)
     vol_pct = round((v / avg_vol) * 100) if avg_vol > 0 else 100
     recent = sum(volumes[-5:]) / 5  # = volAvgRecent
@@ -803,9 +806,9 @@ def detect_signals(closes, highs, lows, opens, bw, rsi_values,
             for ema_name, ema_data, prio in [("EMA 21", ema_21, 5), ("EMA 50", ema_50, 5), ("EMA 200", ema_200, 3)]:
                 if ema_data[i] is not None and ema_data[i-1] is not None:
                     if closes[i] > ema_data[i] and closes[i-1] <= ema_data[i-1]:
-                        signals.append({"name": f"{ema_name} BO @ {_fmt_price(ema_data[i])}", "bullish": True, "age": age, "priority": prio})
+                        signals.append({"name": f"{ema_name} BO", "bullish": True, "age": age, "priority": prio})
                     if closes[i] < ema_data[i] and closes[i-1] >= ema_data[i-1]:
-                        signals.append({"name": f"{ema_name} BD @ {_fmt_price(ema_data[i])}", "bullish": False, "age": age, "priority": prio})
+                        signals.append({"name": f"{ema_name} BD", "bullish": False, "age": age, "priority": prio})
 
         # EMA crosses
         if i > 0:
@@ -823,24 +826,24 @@ def detect_signals(closes, highs, lows, opens, bw, rsi_values,
         # VWAP breaks
         if i > 0 and vwap_values[i] is not None and vwap_values[i-1] is not None:
             if closes[i] > vwap_values[i] and closes[i-1] <= vwap_values[i-1]:
-                signals.append({"name": f"D-VWAP BO @ {_fmt_price(vwap_values[i])}", "bullish": True, "age": age, "priority": 4})
+                signals.append({"name": "VWAP BO", "bullish": True, "age": age, "priority": 4})
             if closes[i] < vwap_values[i] and closes[i-1] >= vwap_values[i-1]:
-                signals.append({"name": f"D-VWAP BD @ {_fmt_price(vwap_values[i])}", "bullish": False, "age": age, "priority": 4})
+                signals.append({"name": "VWAP BD", "bullish": False, "age": age, "priority": 4})
 
         # Middle Line Break (price crossing trend midline m1, NOT Supertrend flip)
         if i > 0 and i < len(mid_series) and mid_series[i] is not None and mid_series[i-1] is not None:
             if closes[i] > mid_series[i] and closes[i-1] <= mid_series[i-1]:
-                signals.append({"name": f"Middle Line BO @ {_fmt_price(mid_series[i])}", "bullish": True, "age": age, "priority": 3})
+                signals.append({"name": "Middle Line BO", "bullish": True, "age": age, "priority": 3})
             if closes[i] < mid_series[i] and closes[i-1] >= mid_series[i-1]:
-                signals.append({"name": f"Middle Line BD @ {_fmt_price(mid_series[i])}", "bullish": False, "age": age, "priority": 3})
+                signals.append({"name": "Middle Line BD", "bullish": False, "age": age, "priority": 3})
 
         # Fibonacci level breaks (all 7 for signals)
         if fib_levels and "levels" in fib_levels and i > 0:
             for fib_name, fib_price in fib_levels["levels"].items():
                 if closes[i] > fib_price and closes[i-1] <= fib_price:
-                    signals.append({"name": f"Fib {fib_name} BO @ {_fmt_price(fib_price)}", "bullish": True, "age": age, "priority": 5})
+                    signals.append({"name": f"Fib {fib_name} BO", "bullish": True, "age": age, "priority": 5})
                 if closes[i] < fib_price and closes[i-1] >= fib_price:
-                    signals.append({"name": f"Fib {fib_name} BD @ {_fmt_price(fib_price)}", "bullish": False, "age": age, "priority": 5})
+                    signals.append({"name": f"Fib {fib_name} BD", "bullish": False, "age": age, "priority": 5})
 
         # ═══ CANDLESTICK PATTERNS — MATCH PINESCRIPT EXACTLY ═══
         if i >= 1:
@@ -1114,8 +1117,8 @@ def _cancel_opposing_signals(signals):
         # EMA crosses
         (lambda n: n == "21/50 EMA Bullish Cross",     lambda n: n == "21/50 EMA Bearish Cross"),
         (lambda n: n == "Golden Cross (50/200)",       lambda n: n == "Death Cross (50/200)"),
-        # D-VWAP BO <-> BD
-        (lambda n: "D-VWAP BO" in n,                   lambda n: "D-VWAP BD" in n),
+        # VWAP BO <-> BD
+        (lambda n: "VWAP BO" in n,                     lambda n: "VWAP BD" in n),
         # BrainWaves main crosses
         (lambda n: n == "BrainWaves Bullish Cross",    lambda n: n == "BrainWaves Bearish Cross"),
         (lambda n: n == "BrainWaves Extreme Oversold Cross",
