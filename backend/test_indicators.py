@@ -331,8 +331,8 @@ check("is_range matches cluster_size>1 AND spread_pct>=0.2 for all entries (#16)
 
 # Trend-line sources should appear somewhere in S/R (primary sources)
 flat_sources = [s for e in all_entries for s in e["sources"]]
-check("Trend-line sources (Upper/Mid/Lower) appear in S/R output",
-      any(name in flat_sources for name in ("Upper", "Mid", "Lower")),
+check("Trend-line sources (Trend Top/Mid/Low) appear in S/R output",
+      any(name in flat_sources for name in ("Trend Top", "Trend Mid", "Trend Low")),
       f"sources found: {set(flat_sources)}")
 
 
