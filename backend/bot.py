@@ -14,6 +14,8 @@ from typing import Optional
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     MenuButtonWebApp, WebAppInfo, InputFile,
+    BotCommand, BotCommandScopeDefault, BotCommandScopeChat,
+    InputMediaDocument,
 )
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ContextTypes,
@@ -42,15 +44,16 @@ def create_bot_app() -> Optional[Application]:
     # Public handshake — everyone
     app.add_handler(CommandHandler("start", cmd_start))
 
-    # Owner-only admin commands (silently ignored for non-owners)
+    # Owner-only admin commands (silently ignored for non-owners).
+    # Consolidated April 18 session 2: dropped /waitlist (now embedded in /stats);
+    # merged /export_users + /export_waitlist into a single /export that sends
+    # both CSVs as a media group.
     app.add_handler(CommandHandler("users", cmd_users))
-    app.add_handler(CommandHandler("waitlist", cmd_waitlist))
     app.add_handler(CommandHandler("recent", cmd_recent))
-    app.add_handler(CommandHandler("export_users", cmd_export_users))
-    app.add_handler(CommandHandler("export_waitlist", cmd_export_waitlist))
     app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("export", cmd_export))
 
-    # Pagination callback (for /users and /waitlist "Next/Prev" buttons)
+    # Pagination callback (for /users "Next/Prev" buttons)
     app.add_handler(CallbackQueryHandler(on_admin_callback, pattern=r"^admin:"))
 
     return app
@@ -68,6 +71,42 @@ async def setup_menu_button(app: Application):
         logger.info("Menu button set to Mini App")
     except Exception as e:
         logger.error(f"Failed to set menu button: {e}")
+
+
+async def setup_commands(app: Application):
+    """Set the `/` command menu via Bot API `setMyCommands` with scoped lists.
+
+    Public users see only /start. Each owner in OWNER_CHAT_IDS gets an admin
+    menu that includes /stats, /users, /recent, /export in their DM with the
+    bot. This replaces the manual BotFather `/setcommands` step — the bot now
+    manages its own menu on every startup, so command changes ship with code
+    deploys and new owners added via env var get the admin menu automatically
+    on next restart.
+
+    Telegram's scope rule: BotCommandScopeChat(chat_id=<owner>) overrides
+    BotCommandScopeDefault for that specific user. Everyone else falls back
+    to default scope (public list).
+    """
+    public = [
+        BotCommand("start", "Open the app and join the community"),
+    ]
+    admin = [
+        BotCommand("start", "Open the app"),
+        BotCommand("stats", "Stats + waitlist + top attribution sources"),
+        BotCommand("users", "Recent users (paginated)"),
+        BotCommand("recent", "Recent events log"),
+        BotCommand("export", "Download users + waitlist CSVs"),
+    ]
+    try:
+        await app.bot.set_my_commands(public, scope=BotCommandScopeDefault())
+        for oid in OWNER_CHAT_IDS:
+            try:
+                await app.bot.set_my_commands(admin, scope=BotCommandScopeChat(chat_id=oid))
+            except Exception as e:
+                logger.warning(f"Failed to set admin commands for owner {oid}: {e}")
+        logger.info(f"Command menus set: public (default), admin (for {len(OWNER_CHAT_IDS)} owners)")
+    except Exception as e:
+        logger.error(f"Failed to set command menus: {e}")
 
 
 def _open_app_keyboard():
@@ -131,7 +170,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ═══════════════════════════════════════════════════════════════
 
 PAGE_SIZE_USERS = 20
-PAGE_SIZE_WAITLIST = 20
 
 
 def _check_owner(update: Update) -> bool:
@@ -228,32 +266,10 @@ async def _render_users_page(message, page: int, edit: bool = False):
         await message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
 
 
-async def _render_waitlist_page(message, page: int, edit: bool = False):
-    total = get_stats_extended()["waitlist_total"]
-    rows = get_waitlist_rows(limit=PAGE_SIZE_WAITLIST, offset=page * PAGE_SIZE_WAITLIST)
-    if not rows:
-        text = "📝 *Waitlist* — empty."
-    else:
-        header = f"📝 *Waitlist* — {total} total (page {page + 1})\n\n"
-        body = "\n".join(_fmt_waitlist_row(w) for w in rows)
-        text = header + body
-    kb = _page_keyboard("waitlist", page, total, PAGE_SIZE_WAITLIST)
-    if edit:
-        await message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
-    else:
-        await message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
-
-
 async def cmd_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _check_owner(update):
         return
     await _render_users_page(update.message, page=0)
-
-
-async def cmd_waitlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not _check_owner(update):
-        return
-    await _render_waitlist_page(update.message, page=0)
 
 
 async def cmd_recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -278,6 +294,11 @@ async def cmd_recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Aggregate counts + top attribution sources + embedded waitlist table.
+    Waitlist inline caps at 30 rows; beyond that, user runs /export for the
+    full CSV. Telegram message cap is 4096 chars; with 30 rows + other
+    sections we stay well under. Escape user-supplied strings with _esc_md.
+    """
     if not _check_owner(update):
         return
     s = get_stats_extended()
@@ -295,57 +316,89 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("*Top attribution sources:*")
         for row in top[:5]:
             lines.append(f"  • `{row['source']}` — {row['count']}")
+    # Embedded waitlist table — replaces the old /waitlist command.
+    wl_rows = get_waitlist_rows(limit=30, offset=0)
+    lines.append("")
+    if not wl_rows:
+        lines.append("_Waitlist empty._")
     else:
-        lines.append("")
-        lines.append("_No tagged-link arrivals yet._")
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        cap = 30
+        lines.append(f"📝 *Waitlist* (last {min(len(wl_rows), cap)})")
+        for w in wl_rows[:cap]:
+            lines.append(_fmt_waitlist_row(w))
+        if s["waitlist_total"] > cap:
+            remaining = s["waitlist_total"] - cap
+            lines.append(f"_… and {remaining} more — use /export for full CSV._")
+    text = "\n".join(lines)
+    # Defensive truncation — unlikely to trigger given the 30-row cap.
+    if len(text) > 4000:
+        text = text[:3990] + "\n… (truncated)"
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
-async def cmd_export_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send users.csv + waitlist.csv as a single Telegram media group message.
+    Replaces the old /export_users + /export_waitlist pair. Two attachments
+    appear bundled in one chat bubble; each opens independently into the
+    user's spreadsheet app.
+    """
     if not _check_owner(update):
         return
-    rows = get_recent_users(limit=100_000, offset=0)
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow([
+
+    # Users CSV
+    users_rows = get_recent_users(limit=100_000, offset=0)
+    users_buf = io.StringIO()
+    uw = csv.writer(users_buf)
+    uw.writerow([
         "tg_id", "username", "first_name", "last_name", "language",
         "is_premium", "open_count", "first_start_param",
         "first_seen_iso", "last_seen_iso",
     ])
-    for r in rows:
-        writer.writerow([
+    for r in users_rows:
+        uw.writerow([
             r.get("tg_id"), r.get("username") or "", r.get("first_name") or "",
             r.get("last_name") or "", r.get("language") or "",
             r.get("is_premium") or 0, r.get("open_count") or 0,
             r.get("first_start_param") or "",
             _iso(r.get("first_seen")), _iso(r.get("last_seen")),
         ])
-    data = buf.getvalue().encode("utf-8")
-    fname = f"brainer_users_{int(time.time())}.csv"
-    await update.message.reply_document(
-        document=InputFile(io.BytesIO(data), filename=fname),
-        caption=f"Users CSV — {len(rows)} rows",
-    )
+    users_bytes = users_buf.getvalue().encode("utf-8")
 
-
-async def cmd_export_waitlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not _check_owner(update):
-        return
-    rows = get_waitlist_rows(limit=100_000, offset=0)
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["id", "tg_id", "email", "tg_username", "signed_up_iso"])
-    for r in rows:
-        writer.writerow([
+    # Waitlist CSV
+    wl_rows = get_waitlist_rows(limit=100_000, offset=0)
+    wl_buf = io.StringIO()
+    ww = csv.writer(wl_buf)
+    ww.writerow(["id", "tg_id", "email", "tg_username", "signed_up_iso"])
+    for r in wl_rows:
+        ww.writerow([
             r.get("id"), r.get("tg_id") or "", r.get("email") or "",
             r.get("tg_username") or "", _iso(r.get("signed_up_at")),
         ])
-    data = buf.getvalue().encode("utf-8")
-    fname = f"brainer_waitlist_{int(time.time())}.csv"
-    await update.message.reply_document(
-        document=InputFile(io.BytesIO(data), filename=fname),
-        caption=f"Waitlist CSV — {len(rows)} rows",
-    )
+    wl_bytes = wl_buf.getvalue().encode("utf-8")
+
+    ts = int(time.time())
+    media = [
+        InputMediaDocument(
+            media=InputFile(io.BytesIO(users_bytes), filename=f"brainer_users_{ts}.csv"),
+            caption=f"📦 Export · users: {len(users_rows)} rows · waitlist: {len(wl_rows)} rows",
+        ),
+        InputMediaDocument(
+            media=InputFile(io.BytesIO(wl_bytes), filename=f"brainer_waitlist_{ts}.csv"),
+        ),
+    ]
+    try:
+        await update.message.reply_media_group(media=media)
+    except Exception as e:
+        # Fallback: if media group fails (rare), send two separate documents
+        logger.warning(f"reply_media_group failed, falling back to two messages: {e}")
+        await update.message.reply_document(
+            document=InputFile(io.BytesIO(users_bytes), filename=f"brainer_users_{ts}.csv"),
+            caption=f"Users CSV — {len(users_rows)} rows",
+        )
+        await update.message.reply_document(
+            document=InputFile(io.BytesIO(wl_bytes), filename=f"brainer_waitlist_{ts}.csv"),
+            caption=f"Waitlist CSV — {len(wl_rows)} rows",
+        )
 
 
 async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -369,8 +422,6 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if scope == "users":
         await _render_users_page(query.message, page=page, edit=True)
-    elif scope == "waitlist":
-        await _render_waitlist_page(query.message, page=page, edit=True)
 
 
 # ═══════════════════════════════════════════════════════════════
