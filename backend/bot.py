@@ -88,14 +88,14 @@ async def setup_commands(app: Application):
     to default scope (public list).
     """
     public = [
-        BotCommand("start", "Open the app and join the community"),
+        BotCommand("start", "Open App"),
     ]
     admin = [
-        BotCommand("start", "Open the app"),
-        BotCommand("stats", "Stats + waitlist + top attribution sources"),
-        BotCommand("users", "Recent users (paginated)"),
-        BotCommand("recent", "Recent events log"),
-        BotCommand("export", "Download users + waitlist CSVs"),
+        BotCommand("start", "Open App"),
+        BotCommand("stats", "Statistics"),
+        BotCommand("users", "Recent Users"),
+        BotCommand("recent", "Recent Events"),
+        BotCommand("export", "Export Data"),
     ]
     try:
         await app.bot.set_my_commands(public, scope=BotCommandScopeDefault())
