@@ -23,11 +23,13 @@ from telegram.ext import (
 
 from config import (
     BOT_TOKEN, WEBAPP_URL, BRAINER_URL, COMMUNITY_URL,
-    OWNER_CHAT_IDS, is_owner,
+    OWNER_CHAT_IDS, is_owner, is_root_admin,
 )
 from database import (
     upsert_user, store_event,
     get_recent_users, get_waitlist_rows, get_recent_events, get_stats_extended,
+    add_admin, remove_admin, list_db_admins, list_db_admin_ids,
+    resolve_username_to_tg_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,13 @@ def create_bot_app() -> Optional[Application]:
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("export", cmd_export))
 
+    # Admin-management commands. /admins (list) is visible to all admins;
+    # /addadmin and /removeadmin are root-only (OWNER_CHAT_ID env var) so
+    # DB-added admins cannot promote others or evict root. See is_root_admin().
+    app.add_handler(CommandHandler("admins", cmd_admins))
+    app.add_handler(CommandHandler("addadmin", cmd_addadmin))
+    app.add_handler(CommandHandler("removeadmin", cmd_removeadmin))
+
     # Pagination callback (for /users "Next/Prev" buttons)
     app.add_handler(CallbackQueryHandler(on_admin_callback, pattern=r"^admin:"))
 
@@ -73,19 +82,22 @@ async def setup_menu_button(app: Application):
         logger.error(f"Failed to set menu button: {e}")
 
 
-async def setup_commands(app: Application):
+async def setup_commands(app: Application, demoted_ids: Optional[list] = None):
     """Set the `/` command menu via Bot API `setMyCommands` with scoped lists.
 
-    Public users see only /start. Each owner in OWNER_CHAT_IDS gets an admin
-    menu that includes /stats, /users, /recent, /export in their DM with the
-    bot. This replaces the manual BotFather `/setcommands` step — the bot now
-    manages its own menu on every startup, so command changes ship with code
-    deploys and new owners added via env var get the admin menu automatically
-    on next restart.
+    Public users see only /start. Admins (union of OWNER_CHAT_IDS env var AND
+    DB-added admins via /addadmin) get the admin menu including /stats, /users,
+    /recent, /export, /admins. Root admins additionally see /addadmin and
+    /removeadmin in the list — these commands work for them via the gate check
+    regardless, but showing them in the root menu makes discovery easier.
 
-    Telegram's scope rule: BotCommandScopeChat(chat_id=<owner>) overrides
-    BotCommandScopeDefault for that specific user. Everyone else falls back
-    to default scope (public list).
+    `demoted_ids`: optional list of tg_ids whose scoped commands should be
+    cleared (called by /removeadmin after DB delete). Without this, Telegram
+    would keep showing them the admin menu until a manual /empty happens.
+
+    Telegram's scope rule: BotCommandScopeChat(chat_id=<user>) overrides
+    BotCommandScopeDefault for that specific user. Deleting a chat scope
+    makes the user fall back to default (public) scope.
     """
     public = [
         BotCommand("start", "Open App"),
@@ -96,15 +108,46 @@ async def setup_commands(app: Application):
         BotCommand("users", "Recent Users"),
         BotCommand("recent", "Recent Events"),
         BotCommand("export", "Export Data"),
+        BotCommand("admins", "List Admins"),
     ]
+    # Root admins get the full menu + the admin-management commands.
+    root_admin = admin + [
+        BotCommand("addadmin", "Promote Admin"),
+        BotCommand("removeadmin", "Remove Admin"),
+    ]
+
     try:
         await app.bot.set_my_commands(public, scope=BotCommandScopeDefault())
-        for oid in OWNER_CHAT_IDS:
+
+        # Clear scoped commands for just-demoted users so their admin menu
+        # collapses back to the public list on next /start.
+        for did in (demoted_ids or []):
+            try:
+                await app.bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=did))
+            except Exception as e:
+                logger.warning(f"Failed to clear scoped commands for demoted {did}: {e}")
+
+        # Union of root (env) + DB admins — DB admins get `admin`, root gets `root_admin`.
+        db_ids = set(list_db_admin_ids())
+        root_ids = set(OWNER_CHAT_IDS)
+        # Someone in both env and DB gets treated as root (superset wins).
+        db_only = db_ids - root_ids
+
+        for oid in root_ids:
+            try:
+                await app.bot.set_my_commands(root_admin, scope=BotCommandScopeChat(chat_id=oid))
+            except Exception as e:
+                logger.warning(f"Failed to set root admin commands for {oid}: {e}")
+
+        for oid in db_only:
             try:
                 await app.bot.set_my_commands(admin, scope=BotCommandScopeChat(chat_id=oid))
             except Exception as e:
-                logger.warning(f"Failed to set admin commands for owner {oid}: {e}")
-        logger.info(f"Command menus set: public (default), admin (for {len(OWNER_CHAT_IDS)} owners)")
+                logger.warning(f"Failed to set admin commands for DB admin {oid}: {e}")
+
+        logger.info(
+            f"Command menus set: public (default), root ({len(root_ids)}), db admins ({len(db_only)})"
+        )
     except Exception as e:
         logger.error(f"Failed to set command menus: {e}")
 
@@ -422,6 +465,220 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if scope == "users":
         await _render_users_page(query.message, page=page, edit=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ADMIN MANAGEMENT COMMANDS (root-only add/remove, all admins list)
+# ═══════════════════════════════════════════════════════════════
+
+def _check_root(update: Update) -> bool:
+    """Return True if the command sender is a root admin (env var).
+    Silently drops DB admins and everyone else — matches the existing
+    non-owner silent-drop pattern for admin commands.
+    """
+    user = update.effective_user
+    if not user:
+        return False
+    return is_root_admin(user.id)
+
+
+def _parse_admin_target(raw: str) -> tuple:
+    """Resolve an admin command argument (numeric tg_id OR @username) to a tg_id.
+    Returns (tg_id, error_msg). On success, error_msg is None. On failure,
+    tg_id is None and error_msg is the user-facing explanation.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None, "Missing target. Usage: `/addadmin <tg_id_or_@username> [note]`"
+
+    # Numeric path — positive integer only (negative = group/channel, not user)
+    if raw.lstrip("-").isdigit():
+        tg_id = int(raw)
+        if tg_id <= 0:
+            return None, f"Telegram user IDs are positive. Got: `{raw}`"
+        return tg_id, None
+
+    # Username path — strip @ and validate characters.
+    candidate = raw.lstrip("@")
+    if not candidate or not candidate.replace("_", "").isalnum():
+        return None, f"Invalid input: `{raw}`. Provide a numeric tg_id or @username."
+
+    resolved = resolve_username_to_tg_id(candidate)
+    if resolved is None:
+        return None, (
+            f"I don't know `@{candidate}` yet. Have them tap /start with the bot "
+            f"first, or use their numeric ID (get it via @userinfobot)."
+        )
+    return resolved, None
+
+
+async def cmd_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all admins — root (env) + DB-added. Visible to any admin."""
+    if not _check_owner(update):
+        return
+
+    lines = ["👥 *Admins*", ""]
+
+    # Root admins (env var) — always listed first
+    lines.append(f"*Root* (env var · {len(OWNER_CHAT_IDS)})")
+    if not OWNER_CHAT_IDS:
+        lines.append("_none configured_")
+    else:
+        # Enrich with display names from users table where available.
+        from database import get_db
+        conn = get_db()
+        for rid in OWNER_CHAT_IDS:
+            row = conn.execute(
+                "SELECT username, first_name FROM users WHERE tg_id = ?", (rid,)
+            ).fetchone()
+            name = _esc_md(row["first_name"]) if row and row["first_name"] else "—"
+            uname = f"@{_esc_md(row['username'])}" if row and row["username"] else "—"
+            lines.append(f"• {name} ({uname}) · id `{rid}`")
+        conn.close()
+
+    # DB admins
+    db_rows = list_db_admins()
+    lines.append("")
+    lines.append(f"*Added via bot* ({len(db_rows)})")
+    if not db_rows:
+        lines.append("_No bot-added admins yet._")
+    else:
+        for r in db_rows:
+            name = _esc_md(r.get("first_name")) if r.get("first_name") else "—"
+            uname = f"@{_esc_md(r['username'])}" if r.get("username") else "—"
+            note = f" · _{_esc_md(r['note'])}_" if r.get("note") else ""
+            when = _fmt_ts_relative(r.get("added_at"))
+            added_by = r.get("added_by")
+            lines.append(
+                f"• {name} ({uname}) · id `{r['tg_id']}`{note} · added {when} by `{added_by}`"
+            )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cmd_addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Promote a user to admin (root-only). Usage: /addadmin <id_or_@username> [note]."""
+    if not _check_root(update):
+        return  # silent drop — non-root admins and everyone else
+
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: `/addadmin <tg_id_or_@username> [note]`\n"
+            "Example: `/addadmin @alex beta tester`",
+            parse_mode="Markdown",
+        )
+        return
+
+    target_raw = context.args[0]
+    note = " ".join(context.args[1:]) if len(context.args) > 1 else None
+
+    target_id, err = _parse_admin_target(target_raw)
+    if err:
+        await update.message.reply_text(err, parse_mode="Markdown")
+        return
+
+    # Can't add a root admin — they already have full access.
+    if is_root_admin(target_id):
+        await update.message.reply_text(
+            f"`{target_id}` is already a root admin (env var). No change.",
+            parse_mode="Markdown",
+        )
+        return
+
+    sender_id = update.effective_user.id
+    added = add_admin(target_id, added_by=sender_id, note=note)
+    if not added:
+        await update.message.reply_text(
+            f"`{target_id}` is already an admin. Note not updated.",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Audit trail — surfaces in /recent
+    store_event(
+        sender_id,
+        "admin_added",
+        json.dumps({"target": target_id, "note": note}),
+    )
+
+    # Refresh scoped menus so the new admin sees the admin `/` menu.
+    try:
+        await setup_commands(context.application)
+    except Exception as e:
+        logger.warning(f"Failed to refresh commands after addadmin: {e}")
+
+    # Enrich reply with display name if known
+    display = f"`{target_id}`"
+    from database import get_db
+    conn = get_db()
+    row = conn.execute(
+        "SELECT username, first_name FROM users WHERE tg_id = ?", (target_id,)
+    ).fetchone()
+    conn.close()
+    if row:
+        parts = []
+        if row["first_name"]:
+            parts.append(_esc_md(row["first_name"]))
+        if row["username"]:
+            parts.append(f"@{_esc_md(row['username'])}")
+        if parts:
+            display = f"{' '.join(parts)} (`{target_id}`)"
+
+    note_str = f" · note: _{_esc_md(note)}_" if note else ""
+    await update.message.reply_text(
+        f"✅ Added {display} as admin{note_str}. They'll see the admin menu on next /start.",
+        parse_mode="Markdown",
+    )
+
+
+async def cmd_removeadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Demote a DB admin (root-only). Usage: /removeadmin <id_or_@username>."""
+    if not _check_root(update):
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: `/removeadmin <tg_id_or_@username>`",
+            parse_mode="Markdown",
+        )
+        return
+
+    target_id, err = _parse_admin_target(context.args[0])
+    if err:
+        await update.message.reply_text(err, parse_mode="Markdown")
+        return
+
+    # Root admins are managed via env var, not bot.
+    if is_root_admin(target_id):
+        await update.message.reply_text(
+            f"`{target_id}` is a root admin — managed via `OWNER_CHAT_ID` env var on Railway. "
+            f"Edit the env var to remove.",
+            parse_mode="Markdown",
+        )
+        return
+
+    removed = remove_admin(target_id)
+    if not removed:
+        await update.message.reply_text(
+            f"`{target_id}` is not an admin. Nothing to remove.",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Audit trail — surfaces in /recent
+    sender_id = update.effective_user.id
+    store_event(sender_id, "admin_removed", json.dumps({"target": target_id}))
+
+    # Refresh + clear their scoped commands so the admin menu disappears for them.
+    try:
+        await setup_commands(context.application, demoted_ids=[target_id])
+    except Exception as e:
+        logger.warning(f"Failed to refresh commands after removeadmin: {e}")
+
+    await update.message.reply_text(
+        f"✅ Removed `{target_id}` from admins. Their admin menu will clear on next /start.",
+        parse_mode="Markdown",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
