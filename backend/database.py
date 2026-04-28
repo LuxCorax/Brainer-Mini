@@ -1,5 +1,5 @@
 """
-SQLite database for Brainer Mini App.
+SQLite database for NoBrainer Mini App.
 Tables: users, waitlist, signals, sessions, events.
 """
 import sqlite3
@@ -71,13 +71,6 @@ def init_db():
             event_type TEXT NOT NULL,
             event_data TEXT,
             timestamp REAL
-        );
-
-        CREATE TABLE IF NOT EXISTS admins (
-            tg_id INTEGER PRIMARY KEY,
-            added_by INTEGER NOT NULL,
-            added_at REAL NOT NULL,
-            note TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_signals_pair ON signals(pair, timestamp);
@@ -329,93 +322,3 @@ def get_stats_extended() -> Dict:
         "sessions_total": sessions_total,
         "top_sources": [{"source": r["first_start_param"], "count": r["n"]} for r in top_sources],
     }
-
-
-# ─── Admins (DB-managed, hybrid with OWNER_CHAT_IDS env var) ───
-
-def is_db_admin(tg_id: int) -> bool:
-    """True iff tg_id is present in the admins table.
-    Called by config.is_owner() as the DB half of the union check.
-    Cheap: primary-key lookup.
-    """
-    conn = get_db()
-    row = conn.execute("SELECT 1 FROM admins WHERE tg_id = ?", (tg_id,)).fetchone()
-    conn.close()
-    return row is not None
-
-
-def add_admin(tg_id: int, added_by: int, note: Optional[str] = None) -> bool:
-    """Insert a DB admin. Returns True if newly added, False if already present.
-    `added_by` is the tg_id of the root admin performing the add (audit trail).
-    `note` is an optional free-text label.
-    """
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO admins (tg_id, added_by, added_at, note) VALUES (?, ?, ?, ?)",
-            (tg_id, added_by, time.time(), note),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        # Already exists (PRIMARY KEY conflict) — idempotent no-op.
-        return False
-    finally:
-        conn.close()
-
-
-def remove_admin(tg_id: int) -> bool:
-    """Delete a DB admin. Returns True if a row was removed, False if not present."""
-    conn = get_db()
-    cur = conn.execute("DELETE FROM admins WHERE tg_id = ?", (tg_id,))
-    conn.commit()
-    removed = cur.rowcount > 0
-    conn.close()
-    return removed
-
-
-def list_db_admins() -> List[Dict]:
-    """Return all DB admins, newest first, with display info from users table.
-    LEFT JOIN so rows appear even if the admin hasn't interacted (no users row).
-    Columns: tg_id, added_by, added_at, note, username, first_name.
-    """
-    conn = get_db()
-    rows = conn.execute(
-        """SELECT a.tg_id, a.added_by, a.added_at, a.note,
-                  u.username, u.first_name
-             FROM admins a
-             LEFT JOIN users u ON u.tg_id = a.tg_id
-             ORDER BY a.added_at DESC"""
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def list_db_admin_ids() -> List[int]:
-    """Return bare list of DB admin tg_ids. Used by bot.setup_commands() to
-    build the union of env + DB admins for scoped command menus.
-    """
-    conn = get_db()
-    rows = conn.execute("SELECT tg_id FROM admins").fetchall()
-    conn.close()
-    return [r["tg_id"] for r in rows]
-
-
-def resolve_username_to_tg_id(username: str) -> Optional[int]:
-    """Look up a @username (with or without leading @) in the local users table.
-    Returns tg_id if found, None if not. Case-insensitive match since Telegram
-    usernames are case-insensitive.
-    Used by /addadmin to accept @username input — Telegram Bot API cannot
-    resolve arbitrary usernames, so we rely on prior /start interaction having
-    populated the users row.
-    """
-    clean = username.lstrip("@").lower()
-    if not clean:
-        return None
-    conn = get_db()
-    row = conn.execute(
-        "SELECT tg_id FROM users WHERE LOWER(username) = ? LIMIT 1",
-        (clean,),
-    ).fetchone()
-    conn.close()
-    return row["tg_id"] if row else None
