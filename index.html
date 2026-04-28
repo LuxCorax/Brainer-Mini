@@ -275,11 +275,14 @@ if (tg) {
   tg.expand();
   tg.setHeaderColor('#050609');
   tg.setBackgroundColor('#050609');
-  // Apply top padding to clear Telegram header bar.
-  // Strategy: try newer safeAreaInset (Bot API 8.0+), fall back to a sensible
-  // default that covers status bar + Telegram chrome on all known clients.
-  // The fixed default (60px) protects clients that don't expose safeAreaInset.
-  const safeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+  // Apply top padding to clear Telegram header bar AND Telegram's floating
+  // close/menu buttons that overlay the WebView. Strategy: prefer newer
+  // safeAreaInset (Bot API 8.0+), fall back to a generous default that
+  // protects against the floating "X" close button + "<" back + "..." menu
+  // that Telegram renders ON TOP of every Mini App.
+  // 90px = covers iPhone notch (44-59px) + Telegram floating chrome (~30px).
+  const reportedTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top);
+  const safeTop = reportedTop ? reportedTop + 30 : 90;
   const appEl = document.getElementById('app');
   if (appEl) appEl.style.paddingTop = `${safeTop}px`;
   // Disable close confirmation while user has unsaved waitlist input
@@ -287,17 +290,20 @@ if (tg) {
   // Handle viewport resize (keyboard opening on mobile, or Telegram resize)
   tg.onEvent && tg.onEvent('viewportChanged', () => {
     if (!tg.isExpanded) tg.expand();
-    // Re-read safe area in case it changed
-    const newSafeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+    // Re-read safe area in case it changed; +30px buffer for floating chrome.
+    const reportedTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top);
+    const newSafeTop = reportedTop ? reportedTop + 30 : 90;
     if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
   });
   // React to safe area changes (e.g., orientation, fullscreen toggle)
   tg.onEvent && tg.onEvent('safeAreaChanged', () => {
-    const newSafeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+    const reportedTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top);
+    const newSafeTop = reportedTop ? reportedTop + 30 : 90;
     if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
   });
   tg.onEvent && tg.onEvent('contentSafeAreaChanged', () => {
-    const newSafeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+    const reportedTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top);
+    const newSafeTop = reportedTop ? reportedTop + 30 : 90;
     if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
   });
 } else {
