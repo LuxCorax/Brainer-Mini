@@ -273,18 +273,35 @@ if (tg) {
   tg.expand();
   tg.setHeaderColor('#050609');
   tg.setBackgroundColor('#050609');
-  // Apply safe area inset so content clears the Telegram header bar.
-  // tg.safeAreaInset.top is the pixel height of the status+header area.
-  // Falls back to 0 if the API isn't available (desktop preview, older clients).
-  const safeTop = tg.safeAreaInset?.top || 0;
-  document.getElementById('app').style.paddingTop = `${safeTop + 16}px`;
+  // Apply top padding to clear Telegram header bar.
+  // Strategy: try newer safeAreaInset (Bot API 8.0+), fall back to a sensible
+  // default that covers status bar + Telegram chrome on all known clients.
+  // The fixed default (60px) protects clients that don't expose safeAreaInset.
+  const safeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+  const appEl = document.getElementById('app');
+  if (appEl) appEl.style.paddingTop = `${safeTop}px`;
   // Disable close confirmation while user has unsaved waitlist input
   tg.enableClosingConfirmation && tg.enableClosingConfirmation();
-  // Handle viewport resize (keyboard opening on mobile)
+  // Handle viewport resize (keyboard opening on mobile, or Telegram resize)
   tg.onEvent && tg.onEvent('viewportChanged', () => {
-    if (tg.isExpanded) return;
-    tg.expand();
+    if (!tg.isExpanded) tg.expand();
+    // Re-read safe area in case it changed
+    const newSafeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+    if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
   });
+  // React to safe area changes (e.g., orientation, fullscreen toggle)
+  tg.onEvent && tg.onEvent('safeAreaChanged', () => {
+    const newSafeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+    if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
+  });
+  tg.onEvent && tg.onEvent('contentSafeAreaChanged', () => {
+    const newSafeTop = (tg.safeAreaInset?.top) || (tg.contentSafeAreaInset?.top) || 60;
+    if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
+  });
+} else {
+  // Outside Telegram (desktop preview): no safe area needed
+  const appEl = document.getElementById('app');
+  if (appEl) appEl.style.paddingTop = '16px';
 }
 const tgUser = tg?.initDataUnsafe?.user?.username || '';
 const tgUserId = tg?.initDataUnsafe?.user?.id || null;
