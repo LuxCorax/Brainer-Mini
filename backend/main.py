@@ -1,5 +1,5 @@
 """
-Brainer Mini App — FastAPI Backend
+NoBrainer Mini App — FastAPI Backend
 Routes: /api/analysis, /api/brainwaves, /api/waitlist, /api/events, /api/webhook
 """
 import asyncio
@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Brainer Mini App API",
+    title="NoBrainer Mini App API",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -133,7 +133,7 @@ class UserOpenRequest(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "Brainer Mini App API", "version": "1.0.0"}
+    return {"status": "ok", "service": "NoBrainer Mini App API", "version": "1.0.0"}
 
 
 @app.get("/api/health")
