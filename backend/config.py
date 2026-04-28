@@ -1,4 +1,4 @@
-"""Configuration for Brainer Mini App backend."""
+"""Configuration for NoBrainer Mini App backend."""
 import os
 
 # --- Telegram ---
@@ -17,27 +17,9 @@ for _piece in _owner_raw.split(","):
 OWNER_CHAT_ID = str(OWNER_CHAT_IDS[0]) if OWNER_CHAT_IDS else ""
 
 
-def is_root_admin(tg_id: int) -> bool:
-    """True only for env-var-configured owners (OWNER_CHAT_ID).
-    Root admins cannot be removed via bot commands and are the only users
-    who can add or remove other admins. This is the lockout-proof anchor.
-    """
-    return tg_id in OWNER_CHAT_IDS
-
-
 def is_owner(tg_id: int) -> bool:
-    """True if the given Telegram user ID has admin privileges — either a
-    root admin (env var) OR a DB-added admin (promoted via /addadmin).
-    All existing callsites keep working unchanged: DB admins automatically
-    gain access to every command already gated by is_owner().
-    """
-    if tg_id in OWNER_CHAT_IDS:
-        return True
-    # Lazy import — database imports DB_PATH from config, so a top-level
-    # import would be circular. This runs on every non-root admin check,
-    # but it's a single dict lookup inside is_db_admin, cheap enough.
-    from database import is_db_admin
-    return is_db_admin(tg_id)
+    """True if the given Telegram user ID is configured as an owner/admin."""
+    return tg_id in OWNER_CHAT_IDS
 
 # --- Binance ---
 BINANCE_BASE = "https://api.binance.com"
