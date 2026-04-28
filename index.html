@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#050609">
 <title>NoBrainer Mini</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -299,9 +301,22 @@ if (tg) {
     if (appEl) appEl.style.paddingTop = `${newSafeTop}px`;
   });
 } else {
-  // Outside Telegram (desktop preview): no safe area needed
+  // Outside Telegram (desktop preview, iOS home-screen PWA, Android PWA,
+  // Huawei browser PWA, plain browser):
+  // Strategy: prefer iOS/Android env() variable when supported; otherwise use
+  // a 44px hard floor that covers the notch/status bar area on devices whose
+  // browsers don't expose env() (older Huawei, older Android, etc.).
+  // 44px = covers iPhone notch (44-59px depending on model) at the safe lower
+  // bound + standard Android status bar (~24-28px) with margin to spare.
   const appEl = document.getElementById('app');
-  if (appEl) appEl.style.paddingTop = '16px';
+  if (appEl) {
+    // CSS.supports check: if env() is supported, use it with a 16px floor.
+    // If not, use a fixed 44px to ensure no clipping on older devices.
+    const supportsEnv = window.CSS && CSS.supports && CSS.supports('padding-top', 'env(safe-area-inset-top)');
+    appEl.style.paddingTop = supportsEnv
+      ? 'max(16px, env(safe-area-inset-top))'
+      : '44px';
+  }
 }
 const tgUser = tg?.initDataUnsafe?.user?.username || '';
 const tgUserId = tg?.initDataUnsafe?.user?.id || null;
