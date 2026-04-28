@@ -1,6 +1,6 @@
-# Brainer Mini App — Backend
+# NoBrainer Mini — Backend
 
-FastAPI backend for the Brainer Mini Telegram App.
+FastAPI backend for the NoBrainer Mini Telegram App — a sales-funnel demo of the upcoming NoBrainer app, powered by Brainer Pro logic.
 
 ## What it does
 - Fetches OHLCV data from Binance (free, no auth)
