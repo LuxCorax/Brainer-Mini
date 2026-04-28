@@ -1,324 +1,1192 @@
-"""
-SQLite database for NoBrainer Mini App.
-Tables: users, waitlist, signals, sessions, events.
-"""
-import sqlite3
-import time
-import logging
-from typing import Optional, List, Dict
-from config import DB_PATH
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#050609">
+<title>NoBrainer Mini</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@200;300;400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+::-webkit-scrollbar{width:0}
+html,body{background:#050609;color:#E8EAF0;font-family:'Unbounded',sans-serif;min-height:100vh;overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
+.app{max-width:430px;margin:0 auto;position:relative;padding:0 16px;z-index:1}
+/* Gradient text */
+.gr{background:linear-gradient(90deg,#00BFFF,#00D4AA,#00E87A);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+/* Cards */
+.card{background:#0D0F14;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,194,212,0.3),transparent)}
+.card2{background:#1C2230;border-radius:10px;padding:10px 12px;border:1px solid rgba(255,255,255,0.04)}
+/* Gradient border wrapper */
+.gb{padding:1px;border-radius:15px;background:linear-gradient(135deg,rgba(0,191,255,0.4),rgba(0,232,122,0.4));margin-bottom:16px}
+.gb-inner{background:#0D0F14;border-radius:13px;padding:14px}
+.grad-border{background:linear-gradient(135deg,rgba(0,191,255,0.35),rgba(0,232,122,0.35));padding:1px;border-radius:15px}
+.grad-border-inner{background:#0D0F14;border-radius:13px;padding:16px}
+/* Buttons */
+.grad-btn{background:linear-gradient(90deg,#00BFFF,#00E87A);border:none;border-radius:12px;padding:14px 24px;font-family:'Unbounded',sans-serif;font-weight:600;font-size:13px;color:#050609;cursor:pointer;width:100%;text-align:center;letter-spacing:0.02em;box-shadow:0 4px 20px rgba(0,191,255,0.15)}
+.grad-btn:hover{opacity:0.92}
+/* Section header */
+.sh{font-size:9px;color:rgba(232,234,240,0.38);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px}
+.sh2{font-size:9px;color:rgba(232,234,240,0.38);letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px}
+/* Divider */
+.divider{height:1px;background:rgba(255,255,255,0.07);margin:32px 0;position:relative}
+.divider::after{content:'';position:absolute;left:50%;transform:translateX(-50%);top:-0.5px;width:80px;height:2px;background:linear-gradient(90deg,transparent,#00C2D4,transparent)}
+/* Input */
+input[type="email"],input[type="text"]{background:#1C2230;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 14px;font-family:'Unbounded',sans-serif;font-size:12px;color:#E8EAF0;width:100%;outline:none}
+input::placeholder{color:rgba(232,234,240,0.35)}
+input:focus{border-color:rgba(0,194,212,0.4);box-shadow:0 0 0 3px rgba(0,194,212,0.08)}
+/* Noise overlay */
+.noise{position:fixed;top:0;left:0;right:0;bottom:0;opacity:0.04;pointer-events:none;z-index:999;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+/* Hero glow */
+.hero-glow{position:absolute;top:-100px;left:50%;transform:translateX(-50%);width:500px;height:500px;background:radial-gradient(circle,rgba(0,194,212,0.08) 0%,transparent 70%);pointer-events:none}
+/* Dropdown */
+.drop-toggle{padding:10px 20px;border-radius:10px;border:1.5px solid rgba(0,194,212,0.4);background:rgba(0,194,212,0.08);color:#00C2D4;font-family:'Unbounded',sans-serif;font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:10px;box-shadow:0 0 15px rgba(0,194,212,0.08)}
+.drop-menu{position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);min-width:180px;background:#0D0F14;border:1px solid rgba(0,194,212,0.25);border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.8),0 0 20px rgba(0,194,212,0.06);display:none;z-index:100}
+.drop-menu.open{display:block}
+.drop-list{max-height:280px;overflow-y:auto}
+.drop-item{display:block;width:100%;padding:7px 14px;border:none;background:transparent;color:rgba(232,234,240,0.65);font-family:'Unbounded',sans-serif;font-size:10px;font-weight:400;cursor:pointer;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04)}
+.drop-item:hover{background:rgba(0,194,212,0.06)}
+.drop-item.active{background:rgba(0,194,212,0.1);color:#00C2D4;font-weight:600}
+/* MTF card */
+.mtf-card{background:#0D0F14;border:1px solid rgba(255,255,255,0.08);border-radius:14px;position:relative;overflow:hidden;margin-bottom:7px}
+.mtf-glow{position:absolute;top:0;left:0;right:0;height:2px;z-index:2}
+.mtf-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid rgba(255,255,255,0.07)}
+.mtf-body{padding:10px 14px 12px;display:flex;justify-content:space-between;align-items:flex-start}
+/* Bias pill */
+.bias-pill{font-size:9px;padding:3px 10px;border-radius:5px;display:inline-flex;align-items:center;gap:5px}
+/* Signal row */
+.sig-row{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.sig-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.sig-name{font-size:9px;color:rgba(232,234,240,0.65);flex:1;line-height:1.35}
+.sig-age{font-size:9px;white-space:nowrap}
+/* Phone deck */
+.phone-deck{display:flex;justify-content:center;align-items:flex-end;perspective:1200px;transform:scale(0.58);flex-shrink:0}
+.phone{width:160px;height:340px;flex-shrink:0;margin:0 -14px;border-radius:24px;border:2px solid rgba(255,255,255,0.08);overflow:hidden;background:#0D0F14;box-shadow:0 24px 48px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.06);position:relative}
+.phone-notch{height:32px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid rgba(255,255,255,0.07);position:relative;background:linear-gradient(180deg,rgba(255,255,255,0.03),transparent)}
+.phone-island{width:60px;height:20px;border-radius:0 0 14px 14px;background:#050609;position:absolute;top:0}
+.phone-cam{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);position:absolute;top:6px}
+.phone-content{padding:12px;flex:1;overflow:hidden;position:relative}
+.phone-label{font-size:8px;color:rgba(232,234,240,0.38);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:8px}
+/* MTF Insight */
+/* Volume bar */
+.vol-bar{margin-top:10px;height:3px;border-radius:2px;background:rgba(255,255,255,0.08);position:relative}
+.vol-fill{height:3px;border-radius:2px;transition:width 0.5s}
+.vol-avg-mark{position:absolute;left:50%;top:-3px;width:1px;height:9px;background:rgba(255,255,255,0.3)}
+/* Loading shimmer */
+.loading .sh-bar{background:linear-gradient(90deg,#1C2230 0%,#2a3040 50%,#1C2230 100%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;height:16px;margin-bottom:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Fade-up reveal */
+.reveal{opacity:0;transform:translateY(16px);transition:opacity 0.5s ease,transform 0.5s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-d1{transition-delay:0.06s}.reveal-d2{transition-delay:0.12s}.reveal-d3{transition-delay:0.18s}.reveal-d4{transition-delay:0.24s}
+/* Section transition on pair change */
+.fade-swap{transition:opacity 0.2s ease}
+.fade-swap.fading{opacity:0.3}
+/* Pulse dot for live indicator */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.live-dot{width:5px;height:5px;border-radius:50%;background:#00E87A;display:inline-block;animation:pulse 2s ease infinite;margin-right:4px;vertical-align:middle}
+/* Spinner for analyze pitch */
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,194,212,0.2);border-top-color:#00C2D4;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="noise"></div>
+<div class="hero-glow"></div>
+<div class="app" id="app">
 
-logger = logging.getLogger(__name__)
+<!-- ═══ 1. HERO ═══ -->
+<section style="padding-top:32px;text-align:center;margin-bottom:28px">
+  <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:16px">
+    <svg id="logo-hero" viewBox="130 155 340 230" fill="none" width="40" height="27" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))">
+      <defs><linearGradient id="lg" gradientUnits="userSpaceOnUse" x1="139" y1="265" x2="461" y2="265"><stop offset="0" stop-color="#00BFFF"/><stop offset=".25" stop-color="#00C8E8"/><stop offset=".55" stop-color="#00DDD4"/><stop offset=".8" stop-color="#00E8B0"/><stop offset="1" stop-color="#00E87A"/></linearGradient></defs>
+      <path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/>
+    </svg>
+    <span class="gr" style="font-size:22px;font-weight:700">NoBrainer Mini</span>
+  </div>
+  <h1 style="font-size:14px;font-weight:300;line-height:1.7;color:#E8EAF0;margin-bottom:6px">
+    Mini version of the upcoming
+    <span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">
+      <svg viewBox="130 155 340 230" fill="none" width="14" height="10" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+      <span class="gr" style="font-weight:600">NoBrainer App</span>
+    </span>,
+    with <span style="color:#FFB020;font-weight:700">institutional-level</span> analysis and trade suggestions.
+  </h1>
+  <p style="font-size:13px;font-weight:300;line-height:1.7;color:rgba(232,234,240,0.75)">
+    Powered by the AI logic and signals of the
+    <span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">
+      <svg viewBox="130 155 340 230" fill="none" width="13" height="9" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+      <span class="gr" style="font-weight:600">Brainer Pro</span>
+    </span>
+    TradingView system.
+  </p>
+</section>
 
+<!-- ═══ 2. PAIR SELECTOR ═══ -->
+<div id="pair-selector" style="position:relative;margin-bottom:16px;z-index:50;display:flex;justify-content:center">
+  <div style="position:relative;display:inline-block">
+    <button class="drop-toggle" id="drop-toggle">
+      <span id="pair-label">BTC/USDT</span>
+      <span id="drop-arrow" style="font-size:8px;opacity:0.6;transition:transform 0.2s">▼</span>
+    </button>
+    <div class="drop-menu" id="drop-menu">
+      <div style="padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.07)">
+        <input type="text" id="pair-search" placeholder="Search pair..." style="background:#1C2230;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 12px;font-size:11px;width:100%">
+      </div>
+      <div class="drop-list" id="drop-list"></div>
+    </div>
+  </div>
+</div>
 
-def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+<!-- ═══ 3. PRICE BAR ═══ -->
+<div id="price-bar" style="padding:12px 14px 14px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:16px">
+  <div style="font-size:7.5px;color:rgba(232,234,240,0.38);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px" id="price-pair"></div>
+  <div style="display:flex;align-items:flex-end;justify-content:space-between">
+    <div id="price-display"></div>
+    <div id="price-change"></div>
+  </div>
+</div>
 
+<!-- ═══ 4. BRAINWAVES CHART ═══ -->
+<div style="position:relative" class="reveal">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:300px;height:200px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,194,212,0.06) 0%,transparent 70%);pointer-events:none"></div>
+  <div class="gb">
+    <div class="gb-inner">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:9px;font-weight:600;color:rgba(232,234,240,0.38);letter-spacing:0.14em;text-transform:uppercase">BrainWaves</span>
+        <span style="font-size:9px;color:rgba(232,234,240,0.35)"><span class="live-dot"></span>5m · Live</span>
+      </div>
+      <canvas id="bw-canvas" style="width:100%;height:180px;display:block;border-radius:8px"></canvas>
+    </div>
+  </div>
+</div>
 
-def init_db():
-    """Create tables if they don't exist."""
-    conn = get_db()
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            tg_id INTEGER PRIMARY KEY,
-            username TEXT,
-            first_name TEXT,
-            last_name TEXT,
-            language TEXT DEFAULT 'en',
-            is_premium INTEGER DEFAULT 0,
-            photo_url TEXT,
-            open_count INTEGER DEFAULT 0,
-            first_start_param TEXT,
-            first_seen REAL,
-            last_seen REAL
-        );
+<!-- ═══ 5. MTF ANALYSIS ═══ -->
+<div id="mtf-section" style="margin-bottom:16px" class="reveal reveal-d1 fade-swap">
+  <div id="mtf-cards"></div>
+  <button id="analyze-btn" class="grad-btn" style="margin-top:10px">Analyze</button>
+  <div id="analysis-area" style="display:none;margin-top:10px"></div>
+</div>
 
-        CREATE TABLE IF NOT EXISTS waitlist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_id INTEGER,
-            email TEXT NOT NULL,
-            tg_username TEXT,
-            signed_up_at REAL,
-            UNIQUE(email)
-        );
+<!-- ═══ 6. VOLUME ANALYSIS ═══ -->
+<div class="card reveal reveal-d2 fade-swap" style="margin-bottom:16px" id="volume-section"></div>
 
-        CREATE TABLE IF NOT EXISTS signals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            signal_type TEXT NOT NULL,
-            pair TEXT NOT NULL,
-            timeframe TEXT,
-            direction TEXT,
-            price REAL,
-            data TEXT,
-            timestamp REAL
-        );
+<!-- ═══ 7. ACTIVE SIGNALS ═══ -->
+<div style="position:relative" class="reveal reveal-d3">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:250px;height:150px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,232,122,0.04) 0%,transparent 70%);pointer-events:none"></div>
+  <div class="card fade-swap" style="margin-bottom:16px" id="signals-section"></div>
+</div>
 
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_id INTEGER,
-            started_at REAL,
-            duration_seconds REAL,
-            scroll_depth REAL,
-            pairs_viewed TEXT
-        );
+<!-- ═══ 8. KEY LEVELS ═══ -->
+<div class="card reveal reveal-d4 fade-swap" style="margin-bottom:16px" id="levels-section"></div>
 
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_id INTEGER,
-            event_type TEXT NOT NULL,
-            event_data TEXT,
-            timestamp REAL
-        );
+<!-- ═══ 9. COMMUNITY + BRAINER PRO ═══ -->
+<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:8px">
+  <div class="grad-border" style="border-radius:10px">
+    <a id="cta-community" href="https://t.me/BrainerProAnalyses" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:12px 0;border-radius:9px;background:#0D0F14;border:none;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:500;cursor:pointer;color:#E8EAF0;text-decoration:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 8px rgba(0,194,212,0.3))">
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+      <span>Join our free Telegram for</span>
+      <svg viewBox="130 155 340 230" fill="none" width="13" height="9" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+      <span class="gr" style="font-weight:600">Brainer Pro</span>
+      <span>analyses</span>
+    </a>
+  </div>
+  <div class="grad-border" style="border-radius:10px">
+    <a id="cta-findmore" href="https://brainer.pro" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:12px 0;border-radius:9px;background:#0D0F14;border:none;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:500;cursor:pointer;color:#E8EAF0;text-decoration:none">
+      <span>Learn about the</span>
+      <svg viewBox="130 155 340 230" fill="none" width="13" height="9" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+      <span class="gr" style="font-weight:600">Brainer Pro</span>
+      <span>system</span>
+    </a>
+  </div>
+</div>
 
-        CREATE INDEX IF NOT EXISTS idx_signals_pair ON signals(pair, timestamp);
-        CREATE INDEX IF NOT EXISTS idx_signals_type ON signals(signal_type, timestamp);
-        CREATE INDEX IF NOT EXISTS idx_events_tg ON events(tg_id, timestamp);
-    """)
-    _migrate_users_table(conn)
-    conn.commit()
-    conn.close()
-    logger.info("Database initialized")
+<!-- ═══ DIVIDER ═══ -->
+<div class="divider"></div>
 
+<!-- ═══ 10. NOBRAINER APP TEASER ═══ -->
+<section style="margin-bottom:28px;text-align:center;position:relative" class="reveal">
+  <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-bottom:8px">
+    <svg viewBox="130 155 340 230" fill="none" width="28" height="19" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+    <span style="font-size:18px;font-weight:700">
+      <span class="gr">NoBrainer</span>
+      <span style="font-weight:300;color:rgba(232,234,240,0.5);font-size:14px"> — the app.</span>
+    </span>
+  </div>
+  <p style="font-size:11px;color:rgba(232,234,240,0.5);font-weight:300;margin-bottom:16px">An institutional trading analyst in your pocket. One-tap analysis, trade ideas, and executions across every exchange you use. Almost here.</p>
 
-def _migrate_users_table(conn):
-    """Add new columns to users table if missing.
-    Idempotent — safe to run on every startup.
-    """
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
-    if "photo_url" not in existing:
-        conn.execute("ALTER TABLE users ADD COLUMN photo_url TEXT")
-    if "open_count" not in existing:
-        conn.execute("ALTER TABLE users ADD COLUMN open_count INTEGER DEFAULT 0")
-    if "first_start_param" not in existing:
-        conn.execute("ALTER TABLE users ADD COLUMN first_start_param TEXT")
+  <!-- Phone fan deck -->
+  <div style="position:relative;margin:8px 0 28px">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;height:300px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,194,212,0.12) 0%,rgba(0,232,122,0.06) 40%,transparent 70%);pointer-events:none"></div>
+    <div style="width:100%;height:260px;position:relative;overflow:visible;display:flex;align-items:center;justify-content:center">
+      <div class="phone-deck" id="phone-deck"></div>
+    </div>
+  </div>
+</section>
 
+<!-- ═══ 11. WAITLIST ═══ -->
+<section style="margin-bottom:32px" id="waitlist-section" class="reveal">
+  <div class="grad-border">
+    <div class="grad-border-inner">
+      <h3 style="font-size:14px;font-weight:500;margin-bottom:4px;text-align:center">Join the <span class="gr">Waitlist</span></h3>
+      <p style="font-size:9px;color:rgba(232,234,240,0.45);text-align:center;margin-bottom:14px;font-weight:300">Be first to get NoBrainer when it launches.</p>
+      <div id="waitlist-form">
+        <div style="margin-bottom:12px"><input type="email" id="waitlist-email" placeholder="Your email"></div>
+        <button class="grad-btn" id="waitlist-btn">Join the App Waitlist</button>
+      </div>
+      <div id="waitlist-success" style="display:none;text-align:center;padding:12px 0">
+        <div style="font-size:18px;margin-bottom:4px">✓</div>
+        <div style="font-size:11px;color:#00E87A;font-weight:500">You're on the list!</div>
+        <div style="font-size:9px;color:rgba(232,234,240,0.4);margin-top:2px">We'll reach out when it's ready.</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-# ─── Users ───
+<!-- ═══ 12. FOOTER ═══ -->
+<footer style="text-align:center;padding-bottom:40px">
+  <div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:6px">
+    <svg viewBox="130 155 340 230" fill="none" width="20" height="14" style="filter:drop-shadow(0 0 30px rgba(0,194,212,0.3))"><path fill="url(#lg)" d="M139.4,376.8c-2.4-45.9,15.3-96.1,40.6-134.1c23.9-35.9,55.4-61.9,95.2-76.8c52.3-19.6,102.3-16.3,146.3,21.7c36.1,31.1,48.3,81.1,31.3,125.6c-15.9,41.4-58.3,67.4-95.3,63.3c-37.2-4.1-64.5-35.4-62.3-72.5c1.6-26.7,25.7-49.1,50.7-46.8c9.8,0.9,26.9,4.6,29.3,25.5c-10.9-17.2-29.4-20.3-41.4-14.6c-14.8,7-23.3,21.6-22.7,37c0.7,18,10.9,30.9,27.5,38.1c39.4,17.2,79-15.8,85.3-50.6c10.9-60-34.2-104-87.3-108.9c-45.1-4.2-83.7,12.2-117.7,40.8C174.6,261.7,146.2,319.6,139.4,376.8z"/></svg>
+    <span class="gr" style="font-size:12px;font-weight:600">NoBrainer Mini</span>
+  </div>
+  <p style="font-size:9px;color:rgba(232,234,240,0.4);font-weight:300;margin-bottom:4px">Institutional-grade analysis, simplified.</p>
+  <p style="font-size:8px;color:rgba(232,234,240,0.2);font-weight:200">This is an analysis tool, not financial advice.</p>
+</footer>
 
-def upsert_user(
-    tg_id: int,
-    username: str = None,
-    first_name: str = None,
-    last_name: str = None,
-    language: str = "en",
-    is_premium: bool = False,
-    photo_url: str = None,
-    increment_opens: bool = False,
-    first_start_param: str = None,
-):
-    """UPSERT a user row.
-    - photo_url: COALESCE-merged, new non-None value wins, None preserves existing.
-    - first_start_param: FIRST-TOUCH ONLY. Set on INSERT; never overwritten on
-      UPDATE. Ensures a user's original attribution source is preserved even if
-      they later arrive via a different tagged deep link.
-    - increment_opens: pass True only from /api/user/open. Adds 1 to open_count
-      (on INSERT: initial row gets open_count=1; on UPDATE: +1 to existing).
-      Bot command callers leave this False so /start etc. don't inflate opens.
-    """
-    now = time.time()
-    inc = 1 if increment_opens else 0
-    conn = get_db()
-    conn.execute("""
-        INSERT INTO users (tg_id, username, first_name, last_name, language, is_premium,
-                           photo_url, open_count, first_start_param, first_seen, last_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(tg_id) DO UPDATE SET
-            username = COALESCE(excluded.username, username),
-            first_name = COALESCE(excluded.first_name, first_name),
-            last_name = COALESCE(excluded.last_name, last_name),
-            language = excluded.language,
-            is_premium = excluded.is_premium,
-            photo_url = COALESCE(excluded.photo_url, photo_url),
-            first_start_param = COALESCE(users.first_start_param, excluded.first_start_param),
-            open_count = users.open_count + ?,
-            last_seen = excluded.last_seen
-    """, (tg_id, username, first_name, last_name, language, int(is_premium),
-          photo_url, inc, first_start_param, now, now, inc))
-    conn.commit()
-    conn.close()
+</div><!-- .app -->
 
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG & API
+// ═══════════════════════════════════════════════════════════════
+const API_BASE = 'https://brainer-mini-production.up.railway.app'; // Railway backend
+const USE_MOCK = !API_BASE; // Auto-fallback to mock when no API configured
 
-# ─── Waitlist ───
+// Telegram Mini App
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#050609');
+  tg.setBackgroundColor('#050609');
+  // Disable close confirmation while user has unsaved waitlist input
+  tg.enableClosingConfirmation && tg.enableClosingConfirmation();
+  // Handle viewport resize (keyboard opening on mobile)
+  tg.onEvent && tg.onEvent('viewportChanged', () => {
+    if (tg.isExpanded) return;
+    tg.expand();
+  });
+}
+const tgUser = tg?.initDataUnsafe?.user?.username || '';
+const tgUserId = tg?.initDataUnsafe?.user?.id || null;
 
-def add_to_waitlist(email: str, tg_username: str = None, tg_id: int = None) -> bool:
-    """Add email to waitlist. Returns True if new, False if duplicate."""
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO waitlist (tg_id, email, tg_username, signed_up_at) VALUES (?, ?, ?, ?)",
-            (tg_id, email.lower().strip(), tg_username, time.time()),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        conn.close()
+// ═══════════════════════════════════════════════════════════════
+// ANALYTICS (stubs — sends to backend when API_BASE is set)
+// ═══════════════════════════════════════════════════════════════
+const sessionStart = Date.now();
+let maxScrollDepth = 0;
+const pairsViewed = new Set();
 
+function trackEvent(type, data = {}) {
+  if (!API_BASE) return;
+  const payload = {
+    tg_id: tgUserId, event_type: type, event_data: data,
+    session_duration: Math.round((Date.now() - sessionStart) / 1000),
+    scroll_depth: maxScrollDepth,
+    timestamp: new Date().toISOString()
+  };
+  // Fire-and-forget
+  fetch(`${API_BASE}/api/events`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).catch(() => {});
+}
 
-def get_waitlist_count() -> int:
-    conn = get_db()
-    row = conn.execute("SELECT COUNT(*) FROM waitlist").fetchone()
-    conn.close()
-    return row[0]
+// Track scroll depth
+window.addEventListener('scroll', () => {
+  const depth = Math.round((window.scrollY + window.innerHeight) / document.body.scrollHeight * 100);
+  if (depth > maxScrollDepth) maxScrollDepth = depth;
+}, { passive: true });
 
+// Track session end
+window.addEventListener('beforeunload', () => {
+  trackEvent('session_end', { pairs_viewed: [...pairsViewed] });
+});
 
-# ─── Signals ───
+// ═══════════════════════════════════════════════════════════════
+// PAIRS & MOCK DATA
+// ═══════════════════════════════════════════════════════════════
+// Seeded with 50 popular pairs as a fallback. Replaced at runtime by a
+// fetch to /api/pairs, which returns all ~439 USDT pairs loaded by the
+// backend from Binance exchangeInfo on startup.
+let PAIRS = [
+  "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","DOGE/USDT",
+  "ADA/USDT","AVAX/USDT","DOT/USDT","LINK/USDT","MATIC/USDT","UNI/USDT",
+  "ATOM/USDT","LTC/USDT","FIL/USDT","APT/USDT","ARB/USDT","OP/USDT",
+  "NEAR/USDT","SUI/USDT","INJ/USDT","TIA/USDT","SEI/USDT","FET/USDT",
+  "RENDER/USDT","PEPE/USDT","WIF/USDT","BONK/USDT","FLOKI/USDT",
+  "SHIB/USDT","WLD/USDT","JUP/USDT","STX/USDT","IMX/USDT","AAVE/USDT",
+  "MKR/USDT","CRV/USDT","RUNE/USDT","FTM/USDT","ALGO/USDT",
+  "HBAR/USDT","VET/USDT","ICP/USDT","GRT/USDT","SAND/USDT","MANA/USDT",
+  "ENS/USDT","LDO/USDT","PENDLE/USDT","ENA/USDT","TON/USDT"
+];
 
-def store_signal(
-    signal_type: str,
-    pair: str,
-    timeframe: str = None,
-    direction: str = None,
-    price: float = None,
-    data: str = None,
-):
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO signals (signal_type, pair, timeframe, direction, price, data, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (signal_type, pair.upper(), timeframe, direction, price, data, time.time()),
-    )
-    conn.commit()
-    conn.close()
+// Fetch the live pair list from backend and replace the seeded fallback.
+// Fire-and-forget; if it fails (API_BASE empty, network error) we keep the
+// 50-pair seed so the dropdown still works in mock mode.
+async function loadLivePairs() {
+  if (!API_BASE) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/pairs`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!Array.isArray(data.pairs) || data.pairs.length === 0) return;
+    // Backend shape: [{symbol:"BTCUSDT", base:"BTC", quote:"USDT"}, ...]
+    // Frontend shape: "BTC/USDT" strings, BTC-first alphabetical order.
+    const majors = ["BTC","ETH","BNB","SOL","XRP","DOGE","ADA","AVAX"];
+    const formatted = data.pairs.map(p => `${p.base}/${p.quote}`);
+    // Sort: majors first in listed order, then everything else alphabetically
+    const majorSet = new Set(majors.map(m => `${m}/USDT`));
+    const majorPairs = majors.map(m => `${m}/USDT`).filter(s => formatted.includes(s));
+    const rest = formatted.filter(s => !majorSet.has(s)).sort();
+    PAIRS = [...majorPairs, ...rest];
+    // If the dropdown is already open when this resolves, re-render it.
+    if (dropOpen) populateDropdown(document.getElementById('pair-search').value || '');
+  } catch (e) {
+    console.warn('Failed to load live pairs, using seed:', e);
+  }
+}
+const PRICES={BTC:84932,ETH:1623,BNB:612,SOL:178,XRP:0.62,DOGE:0.164,ADA:0.48,AVAX:38.7,DOT:7.2,LINK:15.8,MATIC:0.71,UNI:11.4,ATOM:9.1,LTC:84.5,FIL:5.8,APT:9.3,ARB:1.12,OP:2.45,NEAR:7.6,SUI:1.34,INJ:28.4,TIA:11.2,SEI:0.42,FET:2.18,RENDER:10.5,PEPE:0.0000124,WIF:2.65,BONK:0.0000234,FLOKI:0.000178,SHIB:0.0000248,WLD:3.45,JUP:1.28,STX:2.15,IMX:2.34,AAVE:178,MKR:1850,CRV:0.62,RUNE:5.8,FTM:0.78,ALGO:0.22,HBAR:0.12,VET:0.034,ICP:14.2,GRT:0.28,SAND:0.58,MANA:0.52,ENS:28.5,LDO:2.15,PENDLE:6.8,ENA:0.92,TON:6.45};
+const SIGS_BULL=["Golden Cross (50/200)","VWAP Break (Daily)","BrainWaves Bullish Cross","EMA 21 Break","BrainWaves Zero Cross Up","Fib 0.618 Break","EMA 200 Break","Bullish Engulfing","Three White Soldiers"];
+const SIGS_BEAR=["RSI Hidden Divergence","Middle Line Break","Market Manipulation (CTF)","Death Cross (50/200)","RSI Regular Divergence","Delta Divergence","BrainWaves Extreme OB","VWAP Break (Weekly)","Dark Cloud Cover"];
 
+function seedHash(s){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return Math.abs(h)}
+function seededRng(seed){let s=seed;return()=>{s=(s*16807+0)%2147483647;return s/2147483647}}
 
-def get_recent_signals(pair: str = None, limit: int = 20) -> List[Dict]:
-    conn = get_db()
-    if pair:
-        rows = conn.execute(
-            "SELECT * FROM signals WHERE pair = ? ORDER BY timestamp DESC LIMIT ?",
-            (pair.upper(), limit),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM signals ORDER BY timestamp DESC LIMIT ?", (limit,)
-        ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+function generateMock(pair){
+  const base=pair.split("/")[0];
+  const rng=seededRng(seedHash(pair+Math.floor(Date.now()/30000)));
+  const r=()=>rng();
+  const pick=a=>a[Math.floor(r()*a.length)];
+  const ri=(min,max)=>Math.floor(r()*(max-min+1))+min;
+  const basePrice=PRICES[base]||(r()*100+1);
+  const change=+(r()*10-5).toFixed(2);
+  const price=+(basePrice*(1+change/100)).toFixed(basePrice<0.001?7:basePrice<1?4:2);
 
+  // BrainWaves mock — 100 points of oscillator-like data matching backend shape
+  const N=100;
+  const wt1=[],wt2=[],ribbon=[],histogram=[];
+  const cf=0.8;
+  for(let i=0;i<N;i++){
+    const t=i/N;
+    const n1=Math.sin(t*6.28*3.2*cf+basePrice)*35+Math.sin(t*6.28*7.5*cf+basePrice*2)*18;
+    const n2=Math.cos(t*6.28*2.8*cf+basePrice)*28+Math.sin(t*6.28*5.5*cf+basePrice*3)*12;
+    const w1=+(n1+Math.sin(t*6.28*1.3)*25).toFixed(2);
+    const w2=+(n2+Math.sin(t*6.28*1.1)*20).toFixed(2);
+    const rb=+((w1+w2)/2).toFixed(2);
+    const hv=Math.max(-100,Math.min(100,+((w1-w2)*3).toFixed(2)));
+    wt1.push(w1);wt2.push(w2);ribbon.push(rb);histogram.push(hv);
+  }
+  const crosses=[];
+  for(let i=1;i<N;i++){
+    const up=wt1[i-1]<=wt2[i-1]&&wt1[i]>wt2[i];
+    const dn=wt1[i-1]>=wt2[i-1]&&wt1[i]<wt2[i];
+    if(up||dn)crosses.push({x:i,y:wt1[i],type:up?'bullish':'bearish',extreme:Math.abs(wt1[i])>80});
+  }
 
-# ─── Events / Sessions ───
+  const mkTf=(tf,isCtf)=>{
+    const bias=pick(["BULLISH","BEARISH"]);
+    const flatLabel=isCtf?"Neutral":"Stable";
+    return{
+      name:tf,tf,
+      bias,
+      rsi:ri(25,78),
+      rsi_trend:pick([flatLabel,"Rising","Falling"]),
+      vwap_position:r()>0.5?"Above":"Below",
+      vwap_distance:+(r()*3).toFixed(2),
+      bw_val:+(r()*100-50).toFixed(1),
+      bw_trend:pick([flatLabel,"Rising","Falling"]),
+      ribbon_state:pick(["Expanding","Contracting","Flat"]),
+    };
+  };
+  const ctf=mkTf("5m",true),ltf=mkTf("1m",false),htf=mkTf("15m",false);
 
-def store_event(tg_id: int, event_type: str, event_data: str = None):
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO events (tg_id, event_type, event_data, timestamp) VALUES (?, ?, ?, ?)",
-        (tg_id, event_type, event_data, time.time()),
-    )
-    conn.commit()
-    conn.close()
+  // MTF alignment — mock the new shape (scenario_code, sentiment, confidence, paragraph, conflicts, capitulation)
+  // Uses catalog base-entry prose verbatim for the 8 BR scenarios; NNN fallback for any neutral.
+  const bkey=(ctf.bias==="BULLISH"?"B":"R")+(ltf.bias==="BULLISH"?"B":"R")+(htf.bias==="BULLISH"?"B":"R");
+  const MOCK_ALIGN={
+    BBB:{sentiment:"strong_bull",confidence:"moderate",paragraph:"The 5m is bullish with both the short-term and the bigger trend on side. Alignment is clean across the stack though not every frame is pushing with equal energy. Reads as a broadly bullish setup: direction isn't contested, even if the force behind it varies by frame."},
+    RRR:{sentiment:"strong_bear",confidence:"moderate",paragraph:"The 5m is bearish with both the short-term and the bigger trend on side. Alignment is clean across the stack though not every frame is pushing with equal energy. Reads as a broadly bearish setup: direction isn't contested, even if the force behind it varies by frame."},
+    BBR:{sentiment:"caution",confidence:"moderate",paragraph:"The 5m and short-term are bullish but the bigger trend hasn't confirmed the move. The 15m still leans down even though its push has faded, leaving the lower frames trying to turn a tide that hasn't released. Reads as a counter-move waiting on the larger frame: direction at the macro level hasn't flipped yet."},
+    RRB:{sentiment:"caution",confidence:"moderate",paragraph:"The 5m and short-term are bearish but the bigger trend hasn't confirmed the move. The 15m still leans up even though its push has faded, leaving the lower frames trying to turn a tide that hasn't released. Reads as a counter-move waiting on the larger frame: direction at the macro level hasn't flipped yet."},
+    BRB:{sentiment:"opportunity_long",confidence:"moderate",paragraph:"The 5m is bullish and the bigger trend backs it, but the short-term has pulled back against the direction. The 1m dip is fighting the larger move rather than being confirmed by it. Reads as a pullback inside a broader uptrend: shape is right, but the dip needs to stall before the trend reasserts."},
+    RBR:{sentiment:"opportunity_short",confidence:"moderate",paragraph:"The 5m is bearish and the bigger trend backs it, but the short-term has bounced against the direction. The 1m relief is fighting the larger move rather than being confirmed by it. Reads as a relief rally inside a broader downtrend: shape is right, but the bounce needs to stall before the trend reasserts."},
+    BRR:{sentiment:"weak_bull",confidence:"low",paragraph:"Only the 5m is bullish while both the short-term and the bigger trend are pointing down. The larger frame is actively pushing lower with momentum still expanding, putting weight on the bear side. Reads as a delayed signal: the 5m is often last to flip when the surrounding frames are this aligned, and the bullish pulse here typically fades into the larger pressure."},
+    RBB:{sentiment:"weak_bear",confidence:"low",paragraph:"Only the 5m is bearish while both the short-term and the bigger trend are pointing up. The larger frame is actively pushing higher with momentum still expanding, putting weight on the bull side. Reads as a delayed signal: the 5m is often last to flip when the surrounding frames are this aligned, and the bearish pulse here typically fades into the larger pressure."},
+  };
+  const mockAlign=MOCK_ALIGN[bkey]||{sentiment:"neutral",confidence:"low",paragraph:"All three frames are sitting in indecision with no side holding control. The stack is waiting — momentum isn't committed in either direction across any timeframe. Reads as a market between moves: direction will come from outside the current picture rather than from anything already on the chart."};
+  const alignment={scenario_code:bkey,sentiment:mockAlign.sentiment,confidence:mockAlign.confidence,paragraph:mockAlign.paragraph,conflicts:[],capitulation:false};
 
+  // Signals — flat list with bullish boolean
+  const sigPool=[
+    ...SIGS_BULL.map(n=>({name:n,bullish:true})),
+    ...SIGS_BEAR.map(n=>({name:n,bullish:false})),
+  ];
+  const signals=[];
+  const used=new Set();
+  const nSigs=ri(3,8);
+  for(let i=0;i<nSigs;i++){
+    let s;do{s=pick(sigPool)}while(used.has(s.name));
+    used.add(s.name);
+    signals.push({name:s.name,bullish:s.bullish,age:ri(1,20)});
+  }
 
-def store_session(
-    tg_id: int,
-    duration_seconds: float = 0,
-    scroll_depth: float = 0,
-    pairs_viewed: str = "",
-):
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO sessions (tg_id, started_at, duration_seconds, scroll_depth, pairs_viewed) VALUES (?, ?, ?, ?, ?)",
-        (tg_id, time.time(), duration_seconds, scroll_depth, pairs_viewed),
-    )
-    conn.commit()
-    conn.close()
-
-
-# ─── Stats ───
-
-def get_user_count() -> int:
-    conn = get_db()
-    row = conn.execute("SELECT COUNT(*) FROM users").fetchone()
-    conn.close()
-    return row[0]
-
-
-def get_stats() -> Dict:
-    conn = get_db()
-    users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    waitlist = conn.execute("SELECT COUNT(*) FROM waitlist").fetchone()[0]
-    signals = conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
-    sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-    conn.close()
-    return {
-        "users": users,
-        "waitlist": waitlist,
-        "signals": signals,
-        "sessions": sessions,
+  // Levels — new shape with price_low/price_high/is_range/sources/cluster_size
+  const SRC_POOL=[["Fib 0.618"],["EMA 50"],["PDH"],["VWAP"],["Trend Top"],["Trend Mid"],["Trend Low"],["Fib 0.5","EMA 21"],["Fib 0.382","EMA 50"],["PDC","Trend Low"]];
+  const mkLevels=dir=>{
+    const out=[];
+    for(let i=0;i<3;i++){
+      const offset=price*(0.005+r()*0.015)*dir*(i+1);
+      const pLow=+(price+offset).toFixed(basePrice<1?4:2);
+      const sources=pick(SRC_POOL);
+      const clusterSize=sources.length;
+      const isRange=clusterSize>1&&r()>0.5;
+      const pHigh=isRange?+(pLow*(1+0.003*dir)).toFixed(basePrice<1?4:2):pLow;
+      out.push({
+        price:pLow,price_low:Math.min(pLow,pHigh),price_high:Math.max(pLow,pHigh),
+        sources,cluster_size:clusterSize,is_range:isRange,
+      });
     }
+    return out;
+  };
 
-# ─── Admin reads (called by bot.py command handlers) ───
+  return{
+    symbol:pair.replace("/",""),
+    price,change,
+    brainwaves:{wt1,wt2,ribbon,histogram,crosses,thresholds:{ob:55,os:-55,eob:80,eos:-80}},
+    mtf:{ctf,ltf,htf,alignment},
+    volume:{
+      of_average_pct:ri(30,180),
+      trend:pick(["Increasing","Decreasing","Stable"]),
+      candle:pick(["Bullish","Bearish","Neutral"]),
+    },
+    signals,
+    levels:{resistance:mkLevels(1),support:mkLevels(-1)},
+  };
+}
 
-def get_recent_users(limit: int = 20, offset: int = 0) -> List[Dict]:
-    """Return users ordered by most recent activity (last_seen DESC)."""
-    conn = get_db()
-    rows = conn.execute(
-        """SELECT tg_id, username, first_name, last_name, language, is_premium,
-                  open_count, first_seen, last_seen, first_start_param
-             FROM users ORDER BY last_seen DESC LIMIT ? OFFSET ?""",
-        (limit, offset),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+// ═══════════════════════════════════════════════════════════════
+// API FETCH (with mock fallback)
+// ═══════════════════════════════════════════════════════════════
+async function fetchData(pair) {
+  if (USE_MOCK) return generateMock(pair);
+  try {
+    const symbol = pair.replace('/', '');
+    const res = await fetch(`${API_BASE}/api/analysis/${symbol}`);
+    if (!res.ok) throw new Error('API error');
+    return await res.json();
+  } catch (e) {
+    console.warn('API unavailable, using mock data:', e);
+    return generateMock(pair);
+  }
+}
 
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let currentPair = 'BTC/USDT';
+let dropOpen = false;
+let lastBwData = null;  // stashed from API for resize redraws
+let lastData = null;    // stashed from API so Analyze button reads cached alignment
 
-def get_waitlist_rows(limit: int = 50, offset: int = 0) -> List[Dict]:
-    """Return waitlist entries, newest first."""
-    conn = get_db()
-    rows = conn.execute(
-        """SELECT id, tg_id, email, tg_username, signed_up_at
-             FROM waitlist ORDER BY signed_up_at DESC LIMIT ? OFFSET ?""",
-        (limit, offset),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+// ═══════════════════════════════════════════════════════════════
+// COLOR UTILS
+// ═══════════════════════════════════════════════════════════════
+function lerpColor(a,b,t){
+  t=Math.max(0,Math.min(1,t));
+  const ah=parseInt(a.slice(1),16),bh=parseInt(b.slice(1),16);
+  const ar=(ah>>16)&0xff,ag=(ah>>8)&0xff,ab_=ah&0xff;
+  const br=(bh>>16)&0xff,bg_=(bh>>8)&0xff,bb=bh&0xff;
+  const rv=Math.round(ar+(br-ar)*t),gv=Math.round(ag+(bg_-ag)*t),bv=Math.round(ab_+(bb-ab_)*t);
+  return`rgb(${rv},${gv},${bv})`;
+}
+function posColor(pos){
+  if(pos<-60)return lerpColor("#1500FF","#2C6A95",(pos+100)/40);
+  if(pos<-20)return lerpColor("#2C6A95","#45DC23",(pos+60)/40);
+  if(pos<20)return lerpColor("#45DC23","#FFF700",(pos+20)/40);
+  if(pos<60)return lerpColor("#FFF700","#FF6200",(pos-20)/40);
+  return lerpColor("#FF6200","#FF0000",(pos-60)/40);
+}
+function parseRGB(col){const m=col.match(/(\d+)/g);return m?[+m[0],+m[1],+m[2]]:[0,194,212]}
 
+// ═══════════════════════════════════════════════════════════════
+// BRAINWAVES CHART
+// ═══════════════════════════════════════════════════════════════
+function drawBrainWaves(pair, bwData){
+  const canvas=document.getElementById('bw-canvas');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width=canvas.offsetWidth*2;
+  const H=canvas.height=canvas.offsetHeight*2;
+  ctx.scale(2,2);
+  const w=W/2,h=H/2;
 
-def get_recent_events(limit: int = 30) -> List[Dict]:
-    """Return recent events joined with user display names."""
-    conn = get_db()
-    rows = conn.execute(
-        """SELECT e.event_type, e.event_data, e.timestamp, e.tg_id,
-                  u.username, u.first_name
-             FROM events e LEFT JOIN users u ON u.tg_id = e.tg_id
-             ORDER BY e.timestamp DESC LIMIT ?""",
-        (limit,),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+  // Build data: from backend if available, else synthetic fallback
+  let data=[];
+  let thresholds={ob:55,os:-55,eob:80,eos:-80};
+  let backendCrosses=null;
 
-
-def get_stats_extended() -> Dict:
-    """Richer stats for the bot's /stats command."""
-    conn = get_db()
-    now = time.time()
-    day_ago = now - 86400
-    week_ago = now - 7 * 86400
-    users_total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    users_24h = conn.execute("SELECT COUNT(*) FROM users WHERE last_seen >= ?", (day_ago,)).fetchone()[0]
-    users_7d = conn.execute("SELECT COUNT(*) FROM users WHERE last_seen >= ?", (week_ago,)).fetchone()[0]
-    waitlist_total = conn.execute("SELECT COUNT(*) FROM waitlist").fetchone()[0]
-    waitlist_24h = conn.execute("SELECT COUNT(*) FROM waitlist WHERE signed_up_at >= ?", (day_ago,)).fetchone()[0]
-    signals_total = conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
-    sessions_total = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-    top_sources = conn.execute(
-        """SELECT first_start_param, COUNT(*) AS n
-             FROM users
-             WHERE first_start_param IS NOT NULL AND first_start_param != ''
-             GROUP BY first_start_param
-             ORDER BY n DESC LIMIT 10"""
-    ).fetchall()
-    conn.close()
-    return {
-        "users_total": users_total,
-        "users_24h": users_24h,
-        "users_7d": users_7d,
-        "waitlist_total": waitlist_total,
-        "waitlist_24h": waitlist_24h,
-        "signals_total": signals_total,
-        "sessions_total": sessions_total,
-        "top_sources": [{"source": r["first_start_param"], "count": r["n"]} for r in top_sources],
+  if(bwData&&Array.isArray(bwData.wt1)&&bwData.wt1.length>0){
+    const n=bwData.wt1.length;
+    for(let i=0;i<n;i++){
+      data.push({
+        wt1:bwData.wt1[i]||0,
+        wt2:bwData.wt2[i]||0,
+        ribbon:(bwData.ribbon&&bwData.ribbon[i])||0,
+        hist:(bwData.histogram&&bwData.histogram[i])||0,
+      });
     }
+    thresholds=bwData.thresholds||thresholds;
+    backendCrosses=bwData.crosses||null;
+  }else{
+    // Safety fallback (shouldn't trigger — mock and API both provide data)
+    const points=120,seed=pair==="BTC/USDT"?42:seedHash(pair)%100,cf=0.8;
+    for(let i=0;i<points;i++){
+      const t=i/points;
+      const n1=Math.sin(t*6.28*3.2*cf+seed)*35+Math.sin(t*6.28*7.5*cf+seed*2)*18;
+      const n2=Math.cos(t*6.28*2.8*cf+seed)*28+Math.sin(t*6.28*5.5*cf+seed*3)*12;
+      const w1=n1+Math.sin(t*6.28*1.3)*25;
+      const w2=n2+Math.sin(t*6.28*1.1)*20;
+      data.push({wt1:w1,wt2:w2,ribbon:(w1+w2)/2,hist:Math.max(-100,Math.min(100,(w1-w2)*3))});
+    }
+  }
+
+  const pad={l:0,r:0,t:8,b:8};
+  const cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
+  const midY=pad.t+ch/2;
+  const toY=v=>midY-(v/100)*(ch/2);
+  const toX=i=>pad.l+(i/(data.length-1))*cw;
+
+  ctx.clearRect(0,0,w,h);
+
+  const obY=toY(thresholds.ob),exObY=toY(thresholds.eob),osY=toY(thresholds.os),exOsY=toY(thresholds.eos);
+  const topY=toY(100),botY=toY(-100);
+
+  // OB zone gradients
+  let g=ctx.createLinearGradient(0,exObY,0,topY);
+  g.addColorStop(0,"rgba(221,34,34,0.35)");g.addColorStop(1,"rgba(0,0,0,0.15)");
+  ctx.fillStyle=g;ctx.fillRect(pad.l,topY,cw,exObY-topY);
+  g=ctx.createLinearGradient(0,obY,0,exObY);
+  g.addColorStop(0,"rgba(221,34,34,0.06)");g.addColorStop(1,"rgba(221,34,34,0.18)");
+  ctx.fillStyle=g;ctx.fillRect(pad.l,exObY,cw,obY-exObY);
+
+  // OS zone gradients
+  g=ctx.createLinearGradient(0,exOsY,0,botY);
+  g.addColorStop(0,"rgba(51,170,0,0.27)");g.addColorStop(1,"rgba(0,0,0,0.15)");
+  ctx.fillStyle=g;ctx.fillRect(pad.l,exOsY,cw,botY-exOsY);
+  g=ctx.createLinearGradient(0,osY,0,exOsY);
+  g.addColorStop(0,"rgba(51,170,0,0.06)");g.addColorStop(1,"rgba(51,170,0,0.18)");
+  ctx.fillStyle=g;ctx.fillRect(pad.l,osY,cw,exOsY-osY);
+
+  // Horizontal lines
+  ctx.strokeStyle="rgba(178,181,190,0.5)";ctx.lineWidth=0.7;
+  [obY,osY,exObY,exOsY].forEach(y=>{ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cw,y);ctx.stroke()});
+  ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,108,0,0.4)";ctx.lineWidth=0.8;
+  ctx.beginPath();ctx.moveTo(pad.l,midY);ctx.lineTo(pad.l+cw,midY);ctx.stroke();ctx.setLineDash([]);
+
+  // Histogram
+  data.forEach((d,i)=>{
+    const x=toX(i),hVal=d.hist;
+    const hH=Math.abs(hVal)/100*(ch/2);
+    const rising=i>0?d.hist>data[i-1].hist:true;
+    const alpha=0.10+Math.abs(hVal)/100*0.60;
+    ctx.strokeStyle=rising?`rgba(166,255,0,${alpha})`:`rgba(255,136,0,${alpha})`;
+    ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,midY);ctx.lineTo(x,hVal>=0?midY-hH:midY+hH);ctx.stroke();
+  });
+
+  // Fill between wt1 and wt2
+  for(let i=1;i<data.length;i++){
+    const x1=toX(i-1),x2=toX(i);
+    const [r,gv,b]=parseRGB(posColor(data[i].ribbon));
+    ctx.beginPath();ctx.moveTo(x1,toY(data[i-1].wt1));ctx.lineTo(x2,toY(data[i].wt1));
+    ctx.lineTo(x2,toY(data[i].wt2));ctx.lineTo(x1,toY(data[i-1].wt2));ctx.closePath();
+    ctx.fillStyle=`rgba(${r},${gv},${b},0.2)`;ctx.fill();
+  }
+
+  // Ghost waves
+  const drawGhost=key=>{
+    for(let i=1;i<data.length;i++){
+      const [r,gv,b]=parseRGB(posColor(data[i].ribbon));
+      ctx.beginPath();ctx.strokeStyle=`rgba(${r},${gv},${b},0.45)`;ctx.lineWidth=1;
+      ctx.moveTo(toX(i-1),toY(data[i-1][key]));ctx.lineTo(toX(i),toY(data[i][key]));ctx.stroke();
+    }
+  };
+  drawGhost("wt1");drawGhost("wt2");
+
+  // Ribbon
+  for(let i=1;i<data.length;i++){
+    ctx.beginPath();ctx.strokeStyle=posColor(data[i].ribbon);ctx.lineWidth=2.5;
+    ctx.moveTo(toX(i-1),toY(data[i-1].ribbon));ctx.lineTo(toX(i),toY(data[i].ribbon));ctx.stroke();
+  }
+
+  // Cross dots — prefer backend-provided crosses, fall back to client detection
+  if(backendCrosses){
+    backendCrosses.forEach(c=>{
+      if(c.x>=0&&c.x<data.length){
+        const x=toX(c.x),y=toY(data[c.x].ribbon);
+        const isExtreme=!!c.extreme;
+        ctx.beginPath();ctx.arc(x,y,isExtreme?5:3,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,0.6)";ctx.fill();
+        ctx.beginPath();ctx.arc(x,y,isExtreme?4:2,0,Math.PI*2);ctx.fillStyle=c.type==='bullish'?"#33aa00":"#dd2222";ctx.fill();
+      }
+    });
+  }else{
+    for(let i=1;i<data.length;i++){
+      const prev=data[i-1],curr=data[i];
+      const crossUp=prev.wt1<=prev.wt2&&curr.wt1>curr.wt2;
+      const crossDown=prev.wt1>=prev.wt2&&curr.wt1<curr.wt2;
+      if(crossUp||crossDown){
+        const x=toX(i),y=toY(curr.ribbon);
+        const isExtreme=crossUp?(curr.wt2<thresholds.os):(curr.wt1>thresholds.ob);
+        ctx.beginPath();ctx.arc(x,y,isExtreme?5:3,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,0.6)";ctx.fill();
+        ctx.beginPath();ctx.arc(x,y,isExtreme?4:2,0,Math.PI*2);ctx.fillStyle=crossUp?"#33aa00":"#dd2222";ctx.fill();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRICE FORMATTING
+// ═══════════════════════════════════════════════════════════════
+function formatPrice(p,change){
+  const el=document.getElementById('price-display');
+  if(p>=1){
+    const whole=Math.floor(p).toLocaleString();
+    const cents=(p%1).toFixed(2).slice(2);
+    const col=change>=0?'#00E87A':'#FF5A5A';
+    el.innerHTML=`<span style="font-size:28px;font-weight:300;color:${col};line-height:1">$${whole}</span><span style="font-size:16px;color:rgba(232,234,240,0.38)">.${cents}</span>`;
+  } else {
+    const formatted=p<0.001?p.toFixed(7):p.toFixed(4);
+    const col=change>=0?'#00E87A':'#FF5A5A';
+    el.innerHTML=`<span style="font-size:24px;font-weight:300;color:${col};line-height:1">$${formatted}</span>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MTF SENTIMENT STYLES (paragraph comes from backend alignment.paragraph;
+// this map only assigns color/icon per sentiment key)
+// ═══════════════════════════════════════════════════════════════
+const SENTIMENT_STYLES = {
+  strong_bull:       {color:"#00E87A", icon:"🟢"},
+  strong_bear:       {color:"#FF5A5A", icon:"🔴"},
+  caution:           {color:"#FFB020", icon:"⚠️"},
+  opportunity_long:  {color:"#00C2D4", icon:"💎"},
+  opportunity_short: {color:"#A855F7", icon:"⚡"},
+  weak_bull:         {color:"#FF5A5A", icon:"⚠️"},  // bullish but fragile
+  weak_bear:         {color:"#00E87A", icon:"💡"},  // bearish but likely stale
+  neutral:           {color:"rgba(232,234,240,0.55)", icon:"○"},  // muted gray
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+function renderMTFCards(d) {
+  const container = document.getElementById('mtf-cards');
+  const glowColors = {ctf:"rgba(0,232,122,0.7)",ltf:"rgba(255,90,90,0.7)",htf:"rgba(0,194,212,0.5)"};
+  let html = '';
+  ['ctf','ltf','htf'].forEach(key => {
+    const tf = d.mtf[key];
+    const isBull = tf.bias === 'BULLISH';
+    const pillBg = isBull ? 'rgba(0,232,122,0.15)' : 'rgba(255,90,90,0.15)';
+    const pillCol = isBull ? '#00E87A' : '#FF5A5A';
+
+    // RSI: "58 Rising"
+    const rsiTxt = (tf.rsi != null) ? `${Math.round(tf.rsi)} ${tf.rsi_trend || ''}`.trim() : 'N/A';
+
+    // BrainWaves: value (colored by ribbon position) + trend + ribbon state
+    const bwValNum = tf.bw_val;
+    const bwValTxt = (bwValNum != null) ? (bwValNum > 0 ? '+' : '') + Math.round(bwValNum) : 'N/A';
+    const bwCol = (bwValNum != null) ? posColor(bwValNum) : 'rgba(232,234,240,0.5)';
+    const bwTrend = tf.bw_trend || '';
+    const ribbonState = tf.ribbon_state || '';
+    const bwMeta = [bwTrend, ribbonState].filter(Boolean).join(' · ');
+
+    html += `<div class="mtf-card">
+      <div class="mtf-glow" style="background:linear-gradient(90deg,transparent,${glowColors[key]},transparent)"></div>
+      <div class="mtf-head">
+        <div><div style="font-size:9px;color:rgba(232,234,240,0.38);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">${key.toUpperCase()}</div><div style="font-size:13px;color:#E8EAF0">${tf.tf}</div></div>
+        <span class="bias-pill" style="background:${pillBg};color:${pillCol}">● ${tf.bias}</span>
+      </div>
+      <div class="mtf-body">
+        <div><div class="sh2">RSI</div><div style="font-size:11px;color:#FFB020;line-height:1.2">${rsiTxt}</div></div>
+        <div style="text-align:right"><div class="sh2">BrainWaves</div><div style="font-size:11px;color:${bwCol};line-height:1.2">${bwValTxt}${bwMeta ? ' ' + bwMeta : ''}</div></div>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function renderVolume(d) {
+  const v = d.volume || {};
+  const pct = (v.of_average_pct != null) ? v.of_average_pct : 100;
+
+  // BW ribbon gradient stops mapped to 0–200% for number color
+  const gradStops = [
+    [0,[26,95,180]],[40,[0,194,212]],[80,[0,232,122]],
+    [120,[255,215,0]],[160,[255,140,0]],[200,[255,61,61]],
+  ];
+  const clamped = Math.max(0, Math.min(pct, 200));
+  let pctCol = '#FF3D3D';
+  for (let s = 0; s < gradStops.length - 1; s++) {
+    const [p0,c0] = gradStops[s], [p1,c1] = gradStops[s+1];
+    if (clamped >= p0 && clamped <= p1) {
+      const t = (clamped - p0) / (p1 - p0);
+      pctCol = `rgb(${Math.round(c0[0]+(c1[0]-c0[0])*t)},${Math.round(c0[1]+(c1[1]-c0[1])*t)},${Math.round(c0[2]+(c1[2]-c0[2])*t)})`;
+      break;
+    }
+  }
+
+  const trend = v.trend || 'Stable';
+  const trendCol = trend === 'Increasing' ? '#00E87A' : trend === 'Decreasing' ? '#FF5A5A' : '#FFB020';
+  const trendArr = trend === 'Increasing' ? '▲' : trend === 'Decreasing' ? '▼' : '●';
+
+  const candle = v.candle || 'Neutral';
+  const candleCol = candle === 'Bullish' ? '#00E87A' : candle === 'Bearish' ? '#FF5A5A' : '#FFB020';
+
+  // Bar: 0–200% scale → 100% average sits at track midpoint.
+  // Visual width capped at 200% (full track). Number shows real value.
+  const barWidth = Math.max(0.5, clamped / 2);  // CSS % of track
+  const bgSize = barWidth > 0 ? (10000 / barWidth) : 100;  // stretch gradient to span full track
+  const barGrad = 'linear-gradient(90deg,#1a5fb4,#00C2D4,#00E87A,#FFD700,#FF8C00,#FF3D3D)';
+
+  document.getElementById('volume-section').innerHTML = `
+    <div class="sh">Volume Analysis</div>
+    <div style="display:flex;justify-content:space-between">
+      <div><div class="sh2">Of Average</div><div style="font-size:22px;font-weight:300"><span style="color:${pctCol}">${pct}%</span></div></div>
+      <div style="text-align:center"><div class="sh2">Trend</div><div style="font-size:11px;font-weight:500;color:${trendCol}">${trendArr} ${trend.toUpperCase()}</div></div>
+      <div style="text-align:right"><div class="sh2">Candle</div><div style="font-size:11px;font-weight:500;color:${candleCol}">${candle.toUpperCase()}</div></div>
+    </div>
+    <div class="vol-bar"><div class="vol-fill" style="width:${barWidth}%;background:${barGrad};background-size:${bgSize}% 100%;background-position:left"></div><div class="vol-avg-mark"></div></div>`;
+}
+
+function renderSignals(d) {
+  const mkCol = (s, isBull) => {
+    const col = isBull ? '#00E87A' : '#FF5A5A';
+    const ageText = s.age <= 1 ? 'NOW' : `${s.age}b`;
+    const ageCol = s.age <= 1 ? '#00E87A' : 'rgba(232,234,240,0.38)';
+    return `<div class="sig-row"><div class="sig-dot" style="background:${col}"></div><span class="sig-name">${s.name}</span><span class="sig-age" style="color:${ageCol}">${ageText}</span></div>`;
+  };
+  const all = Array.isArray(d.signals) ? d.signals : [];
+  const bulls = all.filter(s => s.bullish).sort((a,b) => a.age - b.age);
+  const bears = all.filter(s => !s.bullish).sort((a,b) => a.age - b.age);
+  const emptyMsg = `<div style="font-size:9px;color:rgba(232,234,240,0.3);padding:2px 0">None</div>`;
+  document.getElementById('signals-section').innerHTML = `
+    <div class="sh">Active Signals</div>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><div style="font-size:9px;font-weight:600;letter-spacing:0.1em;color:#00E87A;margin-bottom:8px">▲ BULLISH</div>${bulls.length ? bulls.map(s=>mkCol(s,true)).join('') : emptyMsg}</div>
+      <div style="width:1px;background:rgba(255,255,255,0.07)"></div>
+      <div style="flex:1"><div style="font-size:9px;font-weight:600;letter-spacing:0.1em;color:#FF5A5A;margin-bottom:8px">▼ BEARISH</div>${bears.length ? bears.map(s=>mkCol(s,false)).join('') : emptyMsg}</div>
+    </div>`;
+}
+
+function renderLevels(d) {
+  const fmt = v => v == null ? '' : (v >= 1 ? '$' + v.toLocaleString(undefined, {maximumFractionDigits: 2}) : '$' + v);
+  const mkLevel = (l, col) => {
+    let priceStr;
+    if (l.is_range && l.price_low != null && l.price_high != null) {
+      priceStr = `${fmt(l.price_low)}–${fmt(l.price_high)}`;
+    } else {
+      priceStr = fmt(l.price_low != null ? l.price_low : l.price);
+    }
+    // sources is an array on new backend shape; keep fallbacks for safety
+    let sourcesStr;
+    if (Array.isArray(l.sources)) sourcesStr = l.sources.join(' + ');
+    else if (typeof l.sources === 'string') sourcesStr = l.sources;
+    else sourcesStr = l.label || '';
+    const label = (l.cluster_size && l.cluster_size > 1) ? `${sourcesStr} · Cluster` : sourcesStr;
+    return `<div class="sig-row"><div class="sig-dot" style="background:${col}"></div><span class="sig-name">${label}</span><span style="font-size:11px;color:#E8EAF0;font-variant-numeric:tabular-nums;white-space:nowrap">${priceStr}</span></div>`;
+  };
+  const lv = d.levels || {};
+  const res = Array.isArray(lv.resistance) ? lv.resistance : [];
+  const sup = Array.isArray(lv.support) ? lv.support : [];
+  const emptyMsg = `<div style="font-size:9px;color:rgba(232,234,240,0.3);padding:2px 0">None</div>`;
+  document.getElementById('levels-section').innerHTML = `
+    <div class="sh">Key Levels</div>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><div style="font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#FF5A5A;margin-bottom:8px;display:flex;align-items:center;gap:6px"><div class="sig-dot" style="background:#FF5A5A"></div> Resistance</div>${res.length ? res.map(l=>mkLevel(l,'#FF5A5A')).join('') : emptyMsg}</div>
+      <div style="width:1px;background:rgba(255,255,255,0.07)"></div>
+      <div style="flex:1"><div style="font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#00E87A;margin-bottom:8px;display:flex;align-items:center;gap:6px"><div class="sig-dot" style="background:#00E87A"></div> Support</div>${sup.length ? sup.map(l=>mkLevel(l,'#00E87A')).join('') : emptyMsg}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHONE FAN DECK (NoBrainer teaser)
+// ═══════════════════════════════════════════════════════════════
+function buildPhoneDeck() {
+  const phones = [
+    {title:"Market Data",transform:"rotate(-14deg) translateY(50px) scale(0.84)",opacity:0.8,z:1,gradId:"wg",gradCx:"45%",gradCy:"88%",gradCol:"#00E87A",fibs:'<rect x="184" y="748" width="5" height="8" stroke="#00C2D4" stroke-opacity="0.32" stroke-width="0.7" fill="none"/><rect x="176" y="727" width="13" height="21" stroke="#00C2D4" stroke-opacity="0.24" stroke-width="0.65" fill="none"/>',
+      content:`<div class="phone-label">Market Data</div><div style="font-size:12px;font-weight:600;margin-bottom:6px;background:linear-gradient(90deg,#00BFFF,#00D4AA,#00E87A);-webkit-background-clip:text;-webkit-text-fill-color:transparent">BTC/USDT</div><div style="font-size:20px;font-weight:300;margin-bottom:4px">$74,426<span style="font-size:12px;color:rgba(232,234,240,0.38)">.02</span></div><div style="display:inline-flex;padding:2px 8px;border-radius:3px;font-size:8px;background:rgba(0,232,122,0.12);color:#00E87A">▲ Bull</div><div style="margin-top:12px;display:flex;flex-direction:column;gap:6px"><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="font-size:8px;padding:2px 6px;border-radius:3px;margin-bottom:4px;display:inline-block;background:rgba(0,232,122,0.12);color:#00E87A">CTF · Bull</div><div style="font-size:8px;color:rgba(232,234,240,0.38)">RSI 60 · BW 8</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="font-size:8px;padding:2px 6px;border-radius:3px;margin-bottom:4px;display:inline-block;background:rgba(255,90,90,0.12);color:#FF5A5A">LTF · Bear</div><div style="font-size:8px;color:rgba(232,234,240,0.38)">RSI 44 · BW -35</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="font-size:8px;padding:2px 6px;border-radius:3px;margin-bottom:4px;display:inline-block;background:rgba(0,232,122,0.12);color:#00E87A">HTF · Bull</div><div style="font-size:8px;color:rgba(232,234,240,0.38)">RSI 71 · BW 51</div></div></div>`},
+    {title:"Active Signals",transform:"rotate(-7deg) translateY(20px) scale(0.92)",opacity:0.88,z:2,gradId:"sg",gradCx:"60%",gradCy:"20%",gradCol:"#00BFFF",fibs:'<rect x="346" y="24" width="5" height="8" stroke="#00C2D4" stroke-opacity="0.30" stroke-width="0.7" fill="none"/><rect x="325" y="19" width="13" height="21" stroke="#00C2D4" stroke-opacity="0.22" stroke-width="0.65" fill="none"/>',
+      content:`<div class="phone-label">Active Signals</div><div style="font-size:12px;font-weight:600;margin-bottom:6px">4 Bearish</div><div style="margin-top:10px;display:flex;flex-direction:column;gap:6px"><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;border-radius:50%;background:#FF5A5A"></div><div style="font-size:8px;color:rgba(232,234,240,0.65)">D-VWAP BD</div></div><div style="font-size:7px;color:#00E87A;margin-top:3px">CURRENT</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;border-radius:50%;background:#FF5A5A"></div><div style="font-size:8px;color:rgba(232,234,240,0.65)">BW Broke Below 55</div></div><div style="font-size:7px;color:rgba(232,234,240,0.38);margin-top:3px">2 bars ago</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;border-radius:50%;background:#FF5A5A"></div><div style="font-size:8px;color:rgba(232,234,240,0.65)">RSI Divergence</div></div><div style="font-size:7px;color:rgba(232,234,240,0.38);margin-top:3px">2 bars ago</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="display:flex;align-items:center;gap:5px"><div style="width:5px;height:5px;border-radius:50%;background:#FF5A5A"></div><div style="font-size:8px;color:rgba(232,234,240,0.65)">Delta Divergence</div></div><div style="font-size:7px;color:rgba(232,234,240,0.38);margin-top:3px">4 bars ago</div></div></div>`},
+    {title:"AI Analysis",transform:"scale(1.02)",opacity:1,z:5,isCenter:true,gradId:"ag",gradCx:"70%",gradCy:"72%",gradCol:"#A855F7",fibs:'<rect x="180" y="740" width="5" height="8" stroke="#00C2D4" stroke-opacity="0.30" stroke-width="0.7" fill="none"/><rect x="172" y="722" width="13" height="21" stroke="#00C2D4" stroke-opacity="0.22" stroke-width="0.65" fill="none"/>',
+      content:`<div class="phone-label">AI Analysis</div><div style="font-size:12px;font-weight:600;margin-bottom:6px">Bearish Bias</div><div style="font-size:8px;color:rgba(232,234,240,0.38);line-height:1.6;margin:8px 0">Pullback, not reversal. HTF still bullish.</div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,90,90,0.15);background:#1C2230;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:#FF5A5A">▼ Short · Best</div><div style="display:inline-flex;padding:1px 6px;border-radius:4px;font-size:7px;background:rgba(0,232,122,0.1);color:#00E87A;border:1px solid rgba(0,232,122,0.15)">3.1:1</div></div><div style="font-size:8px;color:rgba(232,234,240,0.38);margin-top:6px">Entry $74,850 · SL $75,200</div><div style="font-size:8px;color:#00E87A;margin-top:2px">TP $73,979</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(168,85,247,0.15);background:#1C2230"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:#A855F7">▲ Long · Risk</div><div style="display:inline-flex;padding:1px 6px;border-radius:4px;font-size:7px;background:rgba(0,232,122,0.1);color:#00E87A;border:1px solid rgba(0,232,122,0.15)">1.9:1</div></div><div style="font-size:8px;color:rgba(232,234,240,0.38);margin-top:6px">Entry $73,975 · SL $73,730</div><div style="font-size:8px;color:#00E87A;margin-top:2px">TP $74,441</div></div>`},
+    {title:"Key Levels",transform:"rotate(7deg) translateY(20px) scale(0.92)",opacity:0.88,z:2,gradId:"kg",gradCx:"50%",gradCy:"30%",gradCol:"#00BFFF",fibs:'<rect x="22" y="28" width="5" height="8" stroke="#00C2D4" stroke-opacity="0.30" stroke-width="0.7" fill="none"/><rect x="14" y="10" width="13" height="21" stroke="#00C2D4" stroke-opacity="0.22" stroke-width="0.65" fill="none"/>',
+      content:`<div class="phone-label">Key Levels</div><div style="font-size:12px;font-weight:600;margin-bottom:6px">S/R Map</div><div style="margin-top:10px"><div style="font-size:7px;color:#FF5A5A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">▲ Resistance</div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230;margin-bottom:6px"><div style="font-size:9px">$76,000</div><div style="font-size:7px;color:rgba(232,234,240,0.38)">PMH</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230;margin-bottom:6px"><div style="font-size:9px">$74,900</div><div style="font-size:7px;color:rgba(232,234,240,0.38)">PDH + Upper · Cluster</div></div><div style="font-size:7px;color:#00C2D4;letter-spacing:0.1em;text-transform:uppercase;margin:10px 0 6px">▼ Support</div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230;margin-bottom:6px"><div style="font-size:9px">$74,316</div><div style="font-size:7px;color:rgba(232,234,240,0.38)">PDC + EMA21 · Cluster</div></div><div style="padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:#1C2230"><div style="font-size:9px">$73,979</div><div style="font-size:7px;color:rgba(232,234,240,0.38)">Fib 0.786</div></div></div>`},
+    {title:"Execute",transform:"rotate(14deg) translateY(50px) scale(0.84)",opacity:0.8,z:1,gradId:"eg",gradCx:"15%",gradCy:"50%",gradCol:"#FFB020",fibs:'<rect x="18" y="390" width="5" height="8" stroke="#00C2D4" stroke-opacity="0.30" stroke-width="0.7" fill="none"/><rect x="10" y="372" width="13" height="21" stroke="#00C2D4" stroke-opacity="0.22" stroke-width="0.65" fill="none"/>',
+      content:`<div class="phone-label">Execute</div><div style="font-size:12px;font-weight:600;margin-bottom:6px">Place Order</div><div style="margin-top:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px"><div style="padding:8px;border-radius:7px;background:rgba(0,232,122,0.12);border:1px solid rgba(0,232,122,0.2);text-align:center;font-size:9px;color:#00E87A">Long</div><div style="padding:8px;border-radius:7px;background:rgba(255,90,90,0.2);border:1px solid rgba(255,90,90,0.3);text-align:center;font-size:9px;color:#FF5A5A">Short ✓</div></div><div style="margin-bottom:8px"><div style="font-size:7px;color:rgba(232,234,240,0.38);margin-bottom:3px">ENTRY</div><div style="padding:8px;border-radius:6px;background:#1C2230;border:1px solid rgba(255,255,255,0.07);font-size:10px">$74,900</div></div><div style="margin-bottom:8px"><div style="font-size:7px;color:rgba(232,234,240,0.38);margin-bottom:3px">STOP LOSS</div><div style="padding:8px;border-radius:6px;background:#1C2230;border:1px solid rgba(255,90,90,0.2);font-size:10px;color:#FF5A5A">$75,200</div></div><div style="margin-bottom:12px"><div style="font-size:7px;color:rgba(232,234,240,0.38);margin-bottom:3px">TAKE PROFIT</div><div style="padding:8px;border-radius:6px;background:#1C2230;border:1px solid rgba(0,232,122,0.2);font-size:10px;color:#00E87A">$73,979</div></div><div style="padding:10px;border-radius:8px;background:linear-gradient(90deg,#FF3D3D,#8C0A0A);text-align:center;font-size:10px;color:#fff">Confirm Short</div></div>`}
+  ];
+
+  const deck = document.getElementById('phone-deck');
+  deck.innerHTML = phones.map(p => {
+    const borderStyle = p.isCenter ? '2px solid rgba(0,194,212,0.25)' : '2px solid rgba(255,255,255,0.08)';
+    const shadowExtra = p.isCenter ? ',0 30px 60px rgba(0,194,212,0.12),0 0 80px rgba(0,194,212,0.06)' : '';
+    return `<div class="phone" style="transform:${p.transform};opacity:${p.opacity};z-index:${p.z};border:${borderStyle};box-shadow:0 24px 48px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.06)${shadowExtra}">
+      <svg style="position:absolute;inset:0;pointer-events:none;border-radius:24px" width="160" height="320" viewBox="0 0 375 812" fill="none"><defs><radialGradient id="${p.gradId}" cx="${p.gradCx}" cy="${p.gradCy}" r="45%"><stop offset="0%" stop-color="${p.gradCol}" stop-opacity="0.12"/><stop offset="100%" stop-color="${p.gradCol}" stop-opacity="0"/></radialGradient></defs><rect width="375" height="812" fill="url(#${p.gradId})"/>${p.fibs}</svg>
+      <div class="phone-notch"><div class="phone-island"></div><div class="phone-cam"></div></div>
+      <div class="phone-content">${p.content}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DROPDOWN
+// ═══════════════════════════════════════════════════════════════
+function populateDropdown(filter = '') {
+  const list = document.getElementById('drop-list');
+  const filtered = PAIRS.filter(p => p.toLowerCase().includes(filter.toLowerCase()));
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="padding:12px 14px;font-size:10px;color:rgba(232,234,240,0.3);text-align:center">No pairs found</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(p =>
+    `<button class="drop-item${p===currentPair?' active':''}" data-pair="${p}">${p}</button>`
+  ).join('');
+}
+
+document.getElementById('drop-toggle').addEventListener('click', () => {
+  dropOpen = !dropOpen;
+  const menu = document.getElementById('drop-menu');
+  const arrow = document.getElementById('drop-arrow');
+  menu.classList.toggle('open', dropOpen);
+  arrow.style.transform = dropOpen ? 'rotate(180deg)' : 'none';
+  if (dropOpen) {
+    document.getElementById('pair-search').value = '';
+    populateDropdown();
+    document.getElementById('pair-search').focus();
+  }
+});
+
+document.getElementById('pair-search').addEventListener('input', e => {
+  populateDropdown(e.target.value);
+});
+
+document.getElementById('drop-list').addEventListener('click', e => {
+  const btn = e.target.closest('.drop-item');
+  if (!btn) return;
+  const pair = btn.dataset.pair;
+  currentPair = pair;
+  hideAnalysis();  // different pair = different read; user must re-tap Analyze
+  document.getElementById('pair-label').textContent = pair;
+  document.getElementById('drop-menu').classList.remove('open');
+  document.getElementById('drop-arrow').style.transform = 'none';
+  dropOpen = false;
+  loadPair(pair, true);
+  startAutoRefresh(); // reset timer on pair change
+});
+
+// Close dropdown on outside click
+document.addEventListener('mousedown', e => {
+  if (dropOpen && !document.getElementById('pair-selector').contains(e.target)) {
+    document.getElementById('drop-menu').classList.remove('open');
+    document.getElementById('drop-arrow').style.transform = 'none';
+    dropOpen = false;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// WAITLIST
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('waitlist-btn').addEventListener('click', async () => {
+  const email = document.getElementById('waitlist-email').value.trim();
+  if (!email || !email.includes('@')) return;
+
+  // Send to backend
+  if (API_BASE) {
+    try {
+      await fetch(`${API_BASE}/api/waitlist`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email, tg_username: tgUser, tg_id: tgUserId})
+      });
+    } catch(e) { console.warn('Waitlist API error:', e); }
+  }
+
+  trackEvent('waitlist_signup', { email_domain: email.split('@')[1] });
+
+  document.getElementById('waitlist-form').style.display = 'none';
+  document.getElementById('waitlist-success').style.display = 'block';
+
+  // Haptic feedback if in Telegram
+  if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+});
+
+// Track "Find out more" CTA click
+document.getElementById('cta-findmore').addEventListener('click', () => {
+  trackEvent('cta_findmore', { current_pair: currentPair });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// LOAD PAIR DATA
+// ═══════════════════════════════════════════════════════════════
+let isLoading = false;
+async function loadPair(pair, animate = true) {
+  if (isLoading) return;
+  isLoading = true;
+
+  // Fade out data sections on pair switch
+  if (animate) {
+    document.querySelectorAll('.fade-swap').forEach(el => el.classList.add('fading'));
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  const d = await fetchData(pair);
+  lastData = d;  // stash so Analyze button can read cached alignment
+  pairsViewed.add(pair);
+  trackEvent('pair_view', { pair });
+
+  // Price bar
+  document.getElementById('price-pair').textContent = pair;
+  formatPrice(d.price, d.change);
+  const chEl = document.getElementById('price-change');
+  const chBg = d.change >= 0 ? 'rgba(0,232,122,0.15)' : 'rgba(255,90,90,0.15)';
+  const chCol = d.change >= 0 ? '#00E87A' : '#FF5A5A';
+  const chArr = d.change >= 0 ? '▲' : '▼';
+  const chSign = d.change >= 0 ? '+' : '';
+  chEl.innerHTML = `<span style="font-size:9px;padding:4px 9px;border-radius:4px;background:${chBg};color:${chCol};display:inline-flex;align-items:center;gap:5px">${chArr} ${chSign}${d.change}%</span>`;
+
+  // BrainWaves — stash from API then draw
+  lastBwData = d.brainwaves || null;
+  drawBrainWaves(pair, lastBwData);
+
+  // Sections
+  renderMTFCards(d);
+  renderVolume(d);
+  renderSignals(d);
+  renderLevels(d);
+
+  // Fade in
+  if (animate) {
+    document.querySelectorAll('.fade-swap').forEach(el => el.classList.remove('fading'));
+  }
+  isLoading = false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INTERSECTION OBSERVER (reveal on scroll)
+// ═══════════════════════════════════════════════════════════════
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+function initRevealObserver() {
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MTF ANALYZE — paragraph render with first-use pitch
+// ═══════════════════════════════════════════════════════════════
+
+// Locked verbatim copy per spec — do not reword.
+const ANALYZE_PITCH_LINE_1 = "Analyzing 5m. Confidence comes from alignment with lower and higher timeframes.";
+const ANALYZE_PITCH_LINE_2 = "Brainer Pro unlocks institutional-grade data and analysis across every timeframe and asset.";
+const FIRST_TAP_FLAG = 'brainer_mini_first_analyze_seen';
+const PITCH_MIN_MS = 5000;
+const PITCH_MAX_MS = 7000;
+const REPEAT_LOADER_MIN_MS = 250;  // brief visual register, not "artificial minimum"
+
+let analysisInFlight = false;
+let pitchActive = false;
+
+function hideAnalysis() {
+  const area = document.getElementById('analysis-area');
+  if (area) {
+    area.style.display = 'none';
+    area.innerHTML = '';
+  }
+  const btn = document.getElementById('analyze-btn');
+  if (btn) btn.textContent = 'Analyze';
+  pitchActive = false;
+  // Don't clear analysisInFlight — let active tap finish; pair switch already
+  // overrides anything in-flight when revealed.
+}
+
+function renderAnalysis(alignment) {
+  const aln = alignment || {sentiment:'neutral', paragraph:'No analysis available.'};
+  const style = SENTIMENT_STYLES[aln.sentiment] || SENTIMENT_STYLES.neutral;
+  const area = document.getElementById('analysis-area');
+  // Sentiment-accented gradient border + dark interior — matches the old chip pattern
+  area.innerHTML =
+    '<div style="background:linear-gradient(135deg,' + style.color + '40,' + style.color + '20);' +
+    'padding:1.5px;border-radius:11px">' +
+    '<div style="background:#0D0F14;border-radius:10px;padding:14px 16px">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+    '<span style="font-size:14px;flex-shrink:0">' + style.icon + '</span>' +
+    '<div style="font-size:9px;color:rgba(232,234,240,0.38);letter-spacing:0.14em;text-transform:uppercase">Multi-Timeframe Analysis</div>' +
+    '</div>' +
+    '<div style="font-size:12px;line-height:1.55;color:#E8EAF0">' + aln.paragraph + '</div>' +
+    '</div></div>';
+  area.style.display = 'block';
+}
+
+function renderPitch() {
+  const area = document.getElementById('analysis-area');
+  area.innerHTML =
+    '<div style="background:linear-gradient(135deg,rgba(0,191,255,0.18),rgba(0,232,122,0.10));padding:1.5px;border-radius:11px">' +
+    '<div style="background:#0D0F14;border-radius:10px;padding:16px">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+    '<span class="spinner"></span>' +
+    '<span class="gr" style="font-size:13px;font-weight:600">Analyzing 5m</span>' +
+    '</div>' +
+    '<div style="font-size:11px;color:rgba(232,234,240,0.6);line-height:1.55;margin-bottom:6px">' +
+    'Confidence comes from alignment with lower and higher timeframes.' +
+    '</div>' +
+    '<div style="font-size:11px;color:rgba(232,234,240,0.55);line-height:1.55">' +
+    ANALYZE_PITCH_LINE_2 + '</div>' +
+    '</div></div>';
+  area.style.display = 'block';
+}
+
+function renderInlineLoader() {
+  const area = document.getElementById('analysis-area');
+  area.innerHTML =
+    '<div style="background:#0D0F14;border:1px solid rgba(255,255,255,0.08);border-radius:11px;padding:14px 16px">' +
+    '<div style="font-size:11px;color:rgba(232,234,240,0.55);letter-spacing:0.04em">Analyzing\u2026</div>' +
+    '</div>';
+  area.style.display = 'block';
+}
+
+async function handleAnalyzeTap() {
+  if (analysisInFlight) return;  // prevent double-tap during any phase
+  analysisInFlight = true;
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+
+  const isFirstTap = btn.textContent.trim() === 'Analyze';
+  // Every "Analyze" click shows the pitch. Only "Re-analyze" clicks skip it.
+  trackEvent('analyze_tap', { pair: currentPair, first_tap: isFirstTap });
+
+  const tapTime = Date.now();
+
+  // Get alignment — from cached lastData (almost always available), else fetch.
+  let dataPromise;
+  if (lastData && lastData.mtf && lastData.mtf.alignment) {
+    dataPromise = Promise.resolve(lastData.mtf.alignment);
+  } else {
+    dataPromise = fetchData(currentPair).then(d => (d && d.mtf && d.mtf.alignment) || null);
+  }
+
+  if (isFirstTap) {
+    // First-ever tap: show pitch, honor 5s minimum, swap to loader at 7s if data not ready
+    pitchActive = true;
+    renderPitch();
+    const ceilingTimer = setTimeout(() => {
+      if (pitchActive) renderInlineLoader();
+    }, PITCH_MAX_MS);
+    const alignment = await dataPromise;
+    const elapsed = Date.now() - tapTime;
+    if (elapsed < PITCH_MIN_MS) {
+      await new Promise(r => setTimeout(r, PITCH_MIN_MS - elapsed));
+    }
+    pitchActive = false;
+    clearTimeout(ceilingTimer);
+    renderAnalysis(alignment);
+  } else {
+    // Repeat tap: brief inline loader, no minimum pitch wait
+    renderInlineLoader();
+    const alignment = await dataPromise;
+    const elapsed = Date.now() - tapTime;
+    if (elapsed < REPEAT_LOADER_MIN_MS) {
+      await new Promise(r => setTimeout(r, REPEAT_LOADER_MIN_MS - elapsed));
+    }
+    renderAnalysis(alignment);
+  }
+
+  btn.textContent = 'Re-analyze';
+  btn.disabled = false;
+  btn.style.opacity = '1';
+  analysisInFlight = false;
+}
+
+document.getElementById('analyze-btn').addEventListener('click', handleAnalyzeTap);
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-REFRESH
+// ═══════════════════════════════════════════════════════════════
+const REFRESH_INTERVAL = 5000; // 5s for extra-live feel
+let refreshTimer = null;
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  refreshTimer = setInterval(() => {
+    loadPair(currentPair, false); // silent refresh, no fade animation
+  }, REFRESH_INTERVAL);
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+}
+
+// Pause refresh when tab hidden, resume when visible
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopAutoRefresh();
+  else startAutoRefresh();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+// Fire /api/user/open for HMAC-validated user tracking + personalization.
+// Fire-and-forget; endpoint is idempotent and increments open_count server-side.
+async function trackAppOpen() {
+  if (!API_BASE || !tg?.initData) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/user/open`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({init_data: tg.initData}),
+    });
+    if (res.ok) return await res.json();
+  } catch (e) {
+    console.warn('app_open tracking failed:', e);
+  }
+  return null;
+}
+trackAppOpen();
+loadLivePairs();
+
+buildPhoneDeck();
+loadPair(currentPair, false).then(() => {
+  // Start reveal animations after first data load
+  requestAnimationFrame(() => initRevealObserver());
+  startAutoRefresh();
+});
+
+// Redraw chart on resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => drawBrainWaves(currentPair, lastBwData), 150);
+});
+</script>
+</body>
+</html>
